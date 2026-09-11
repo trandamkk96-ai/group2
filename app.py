@@ -81,27 +81,12 @@ def update_score(name, so_diem, ly_do, nguoi_ky):
         s.commit()
 
 
-def reset_all_scores(nguoi_ky):
-    """Đưa điểm hiện tại của mọi người về 0 khi sang tuần mới.
-    Vẫn ghi 1 dòng lịch sử cho mỗi người để biết vì sao điểm đổi,
-    lịch sử các lần cộng/trừ trước đó không bị xoá."""
-    members = load_members()
+def reset_all_scores():
+    """Đưa điểm hiện tại của mọi người về 0 VÀ xoá sạch lịch sử cộng/trừ
+    cũ để bắt đầu tuần mới hoàn toàn sạch sẽ. Không thể hoàn tác."""
     with conn.session as s:
-        for _, row in members.iterrows():
-            ten = row["name"]
-            diem_hien_tai = int(row["diem"])
-            if diem_hien_tai != 0:
-                s.execute(
-                    text("UPDATE members SET diem = 0 WHERE name = :name"),
-                    {"name": ten},
-                )
-                s.execute(
-                    text("""
-                        INSERT INTO history (ten, so_diem, ly_do, xac_nhan)
-                        VALUES (:name, :d, :ly_do, :ky)
-                    """),
-                    {"name": ten, "d": -diem_hien_tai, "ly_do": "Reset điểm đầu tuần mới", "ky": nguoi_ky},
-                )
+        s.execute(text("UPDATE members SET diem = 0"))
+        s.execute(text("DELETE FROM history"))
         s.commit()
 
 
@@ -130,13 +115,13 @@ if is_admin:
     st.sidebar.markdown("---")
     st.sidebar.subheader("🔄 Reset điểm tuần mới")
     st.sidebar.caption(
-        "Đưa điểm hiện tại của TẤT CẢ mọi người về 0 để bắt đầu tuần mới. "
-        "Lịch sử các lần cộng/trừ điểm cũ vẫn được giữ lại, không bị mất."
+        "⚠️ Đưa điểm TẤT CẢ mọi người về 0 VÀ XOÁ VĨNH VIỄN toàn bộ lịch sử "
+        "cộng/trừ điểm cũ. Không thể hoàn tác, hãy chắc chắn trước khi bấm."
     )
-    xac_nhan_reset = st.sidebar.checkbox("Tôi chắc chắn muốn reset điểm")
+    xac_nhan_reset = st.sidebar.checkbox("Tôi chắc chắn muốn xoá hết và reset điểm")
     if st.sidebar.button("🔄 Reset điểm về 0", use_container_width=True, disabled=not xac_nhan_reset):
-        reset_all_scores(nguoi_ky="Admin")
-        st.sidebar.success("Đã reset điểm về 0 cho tuần mới!")
+        reset_all_scores()
+        st.sidebar.success("Đã reset điểm về 0 và xoá sạch lịch sử cũ!")
         st.rerun()
 else:
     if password:
