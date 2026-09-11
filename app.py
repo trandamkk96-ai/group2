@@ -81,6 +81,30 @@ def update_score(name, so_diem, ly_do, nguoi_ky):
         s.commit()
 
 
+def reset_all_scores(nguoi_ky):
+    """Đưa điểm hiện tại của mọi người về 0 khi sang tuần mới.
+    Vẫn ghi 1 dòng lịch sử cho mỗi người để biết vì sao điểm đổi,
+    lịch sử các lần cộng/trừ trước đó không bị xoá."""
+    members = load_members()
+    with conn.session as s:
+        for _, row in members.iterrows():
+            ten = row["name"]
+            diem_hien_tai = int(row["diem"])
+            if diem_hien_tai != 0:
+                s.execute(
+                    text("UPDATE members SET diem = 0 WHERE name = :name"),
+                    {"name": ten},
+                )
+                s.execute(
+                    text("""
+                        INSERT INTO history (ten, so_diem, ly_do, xac_nhan)
+                        VALUES (:name, :d, :ly_do, :ky)
+                    """),
+                    {"name": ten, "d": -diem_hien_tai, "ly_do": "Reset điểm đầu tuần mới", "ky": nguoi_ky},
+                )
+        s.commit()
+
+
 # --- THANH BÊN (SIDEBAR): ĐĂNG NHẬP & CÔNG CỤ ADMIN ---
 st.sidebar.title("🔒 Quyền Admin")
 password = st.sidebar.text_input("Nhập mật khẩu Admin:", type="password")
@@ -102,6 +126,18 @@ if is_admin:
             st.rerun()
         elif ten_moi in existing:
             st.sidebar.error("Tên này đã tồn tại!")
+
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("🔄 Reset điểm tuần mới")
+    st.sidebar.caption(
+        "Đưa điểm hiện tại của TẤT CẢ mọi người về 0 để bắt đầu tuần mới. "
+        "Lịch sử các lần cộng/trừ điểm cũ vẫn được giữ lại, không bị mất."
+    )
+    xac_nhan_reset = st.sidebar.checkbox("Tôi chắc chắn muốn reset điểm")
+    if st.sidebar.button("🔄 Reset điểm về 0", use_container_width=True, disabled=not xac_nhan_reset):
+        reset_all_scores(nguoi_ky="Admin")
+        st.sidebar.success("Đã reset điểm về 0 cho tuần mới!")
+        st.rerun()
 else:
     if password:
         st.sidebar.error("Mật khẩu chưa đúng")
