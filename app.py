@@ -274,12 +274,10 @@ else:
 # HEADER
 # ---------------------------------------------------------------
 st.markdown(
-    """
-    <div class="hero">
-        <div class="hero-title">🏆 Quản Lý Điểm Nhóm</div>
-        <div class="hero-subtitle">Bảng xếp hạng điểm — cập nhật trực tiếp, mọi lúc mọi nơi</div>
-    </div>
-    """,
+    '<div class="hero">'
+    '<div class="hero-title">🏆 Quản Lý Điểm Nhóm</div>'
+    '<div class="hero-subtitle">Bảng xếp hạng điểm — cập nhật trực tiếp, mọi lúc mọi nơi</div>'
+    '</div>',
     unsafe_allow_html=True,
 )
 
@@ -375,20 +373,18 @@ else:
             chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
             pct = progress_pct(diem, diem_max)
 
-            st.markdown(
-                f"""
-                <div class="rank-card {top_class}">
-                    <div class="rank-card-top">
-                        <div class="rank-badge">{badge}</div>
-                        <div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>
-                        <div class="member-name">{ten}</div>
-                        <div class="score-pill {pill_class}">{diem:+d} điểm</div>
-                    </div>
-                    <div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            card_html = (
+                f'<div class="rank-card {top_class}">'
+                f'<div class="rank-card-top">'
+                f'<div class="rank-badge">{badge}</div>'
+                f'<div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>'
+                f'<div class="member-name">{ten}</div>'
+                f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
+                f'</div>'
+                f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
+                f'</div>'
             )
+            st.markdown(card_html, unsafe_allow_html=True)
             with st.expander(f"Xem lịch sử của {ten}"):
                 hist_df = load_history(ten)
                 if not hist_df.empty:
@@ -408,14 +404,14 @@ else:
                 ten = row["name"]
                 diem = int(row["diem"])
                 chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
-                blocks_html += f"""
-                <div class="podium-block {classes[i]}">
-                    <div class="podium-medal">{MEDALS.get(rank, '')}</div>
-                    <div class="podium-avatar">{chu_cai_dau}</div>
-                    <div class="podium-name">{ten}</div>
-                    <div class="podium-score">{diem:+d} điểm</div>
-                </div>
-                """
+                blocks_html += (
+                    f'<div class="podium-block {classes[i]}">'
+                    f'<div class="podium-medal">{MEDALS.get(rank, "")}</div>'
+                    f'<div class="podium-avatar">{chu_cai_dau}</div>'
+                    f'<div class="podium-name">{ten}</div>'
+                    f'<div class="podium-score">{diem:+d} điểm</div>'
+                    f'</div>'
+                )
             st.markdown(f'<div class="podium-wrap">{blocks_html}</div>', unsafe_allow_html=True)
 
         for idx, row in rest:
@@ -426,20 +422,18 @@ else:
             chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
             pct = progress_pct(diem, diem_max)
 
-            st.markdown(
-                f"""
-                <div class="rank-card">
-                    <div class="rank-card-top">
-                        <div class="rank-badge">{rank}</div>
-                        <div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>
-                        <div class="member-name">{ten}</div>
-                        <div class="score-pill {pill_class}">{diem:+d} điểm</div>
-                    </div>
-                    <div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            card_html = (
+                f'<div class="rank-card">'
+                f'<div class="rank-card-top">'
+                f'<div class="rank-badge">{rank}</div>'
+                f'<div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>'
+                f'<div class="member-name">{ten}</div>'
+                f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
+                f'</div>'
+                f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
+                f'</div>'
             )
+            st.markdown(card_html, unsafe_allow_html=True)
             with st.expander(f"Xem lịch sử của {ten}"):
                 hist_df = load_history(ten)
                 if not hist_df.empty:
