@@ -13,13 +13,10 @@ from sqlalchemy import text
 st.set_page_config(page_title="Quản Lý Điểm Nhóm", page_icon="🏆", layout="wide")
 
 # --- Kết nối database ---------------------------------------------------
-# Cấu hình kết nối nằm trong Streamlit Secrets (mục [connections.supabase_db]),
-# KHÔNG được ghi cứng trong code. Xem secrets.toml.example để biết cách điền.
 conn = st.connection("supabase_db", type="sql")
 
 
 def init_db():
-    """Tạo bảng nếu chưa có (chạy an toàn nhiều lần)."""
     with conn.session as s:
         s.execute(text("""
             CREATE TABLE IF NOT EXISTS members (
@@ -70,6 +67,14 @@ def load_all_history():
     )
 
 
+def load_last_entry():
+    """Lấy lần cộng/trừ điểm gần nhất (để có thể hoàn tác)."""
+    return conn.query(
+        'SELECT id, ten, so_diem, ly_do, ngay FROM history ORDER BY ngay DESC, id DESC LIMIT 1',
+        ttl=0,
+    )
+
+
 def to_excel_bytes(members_df, history_df):
     bang_diem = members_df.rename(columns={"name": "Thành viên", "diem": "Điểm hiện tại"})
     buffer = io.BytesIO()
@@ -104,17 +109,21 @@ def update_score(name, so_diem, ly_do, nguoi_ky):
         s.commit()
 
 
+def undo_entry(history_id, ten, so_diem):
+    """Hoàn tác 1 lần cộng/trừ điểm: trừ ngược lại điểm đã cộng và xoá dòng lịch sử đó."""
+    with conn.session as s:
+        s.execute(text("UPDATE members SET diem = diem - :d WHERE name = :name"), {"d": so_diem, "name": ten})
+        s.execute(text("DELETE FROM history WHERE id = :id"), {"id": history_id})
+        s.commit()
+
+
 def delete_member(name):
-    """Xoá 1 thành viên khỏi bảng — lịch sử cộng/trừ của người đó cũng
-    tự động bị xoá theo (nhờ ON DELETE CASCADE), không thể hoàn tác."""
     with conn.session as s:
         s.execute(text("DELETE FROM members WHERE name = :name"), {"name": name})
         s.commit()
 
 
 def reset_all_scores():
-    """Đưa điểm hiện tại của mọi người về 0 VÀ xoá sạch lịch sử cộng/trừ
-    cũ để bắt đầu tuần mới hoàn toàn sạch sẽ. Không thể hoàn tác."""
     with conn.session as s:
         s.execute(text("UPDATE members SET diem = 0"))
         s.execute(text("DELETE FROM history"))
@@ -122,7 +131,7 @@ def reset_all_scores():
 
 
 # ---------------------------------------------------------------
-# CSS — giao diện đẹp hơn
+# CSS — giao diện
 # ---------------------------------------------------------------
 st.markdown("""
 <style>
@@ -130,43 +139,50 @@ st.markdown("""
 
     .hero {
         background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-        border-radius: 20px;
-        padding: 28px 32px;
-        margin-bottom: 24px;
-        color: white;
+        border-radius: 20px; padding: 28px 32px; margin-bottom: 24px; color: white;
         box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25);
     }
     .hero-title { font-size: 1.9rem; font-weight: 800; margin: 0; }
     .hero-subtitle { opacity: 0.9; font-size: 0.95rem; margin-top: 4px; }
 
     div[data-testid="stMetric"] {
-        background: #ffffff;
-        border: 1px solid #eef0f3;
-        border-radius: 14px;
-        padding: 12px 16px;
-        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+        background: #ffffff; border: 1px solid #eef0f3; border-radius: 14px;
+        padding: 12px 16px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
     }
 
+    /* --- Podium top 3 --- */
+    .podium-wrap { display: flex; align-items: flex-end; justify-content: center; gap: 14px; margin: 8px 0 26px; }
+    .podium-block {
+        flex: 1; max-width: 220px; border-radius: 16px 16px 6px 6px; padding: 14px 10px 18px;
+        text-align: center; color: white; box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+    }
+    .podium-block.gold { background: linear-gradient(180deg,#fde68a,#f59e0b); height: 200px; order: 2; }
+    .podium-block.silver { background: linear-gradient(180deg,#e5e7eb,#94a3b8); height: 160px; order: 1; }
+    .podium-block.bronze { background: linear-gradient(180deg,#fed7aa,#fb923c); height: 140px; order: 3; }
+    .podium-medal { font-size: 2rem; line-height: 1; }
+    .podium-avatar {
+        width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,0.3);
+        display: flex; align-items: center; justify-content: center; font-weight: 800;
+        font-size: 1.2rem; margin: 6px auto; border: 2px solid rgba(255,255,255,0.7);
+    }
+    .podium-name { font-weight: 800; font-size: 1rem; margin-top: 2px; word-break: break-word; }
+    .podium-score { font-weight: 800; font-size: 1.05rem; margin-top: 4px; }
+
+    /* --- Thẻ xếp hạng (hạng 4 trở đi, hoặc khi tìm kiếm) --- */
     .rank-card {
-        display: flex; align-items: center; gap: 16px;
         background: #ffffff; border: 1px solid #eef0f3; border-radius: 16px;
-        padding: 14px 20px; margin-bottom: 10px;
-        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+        padding: 14px 20px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
         transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
     .rank-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16, 24, 40, 0.08); }
-    .rank-card.top1 { border: 1px solid #fde68a; background: linear-gradient(90deg,#fffbeb,#ffffff); }
-    .rank-card.top2 { border: 1px solid #e5e7eb; background: linear-gradient(90deg,#f9fafb,#ffffff); }
-    .rank-card.top3 { border: 1px solid #fed7aa; background: linear-gradient(90deg,#fff7ed,#ffffff); }
+    .rank-card-top { display: flex; align-items: center; gap: 16px; }
 
-    .rank-badge { width: 40px; min-width: 40px; text-align: center; font-size: 1.2rem; font-weight: 800; color: #9ca3af; }
-    .rank-badge.medal { font-size: 1.7rem; }
+    .rank-badge { width: 34px; min-width: 34px; text-align: center; font-size: 1.1rem; font-weight: 800; color: #9ca3af; }
 
     .avatar {
         width: 42px; height: 42px; min-width: 42px; border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
         font-weight: 800; font-size: 1rem; color: white;
-        background: linear-gradient(135deg, #6366f1, #8b5cf6);
     }
 
     .member-name { flex: 1; font-size: 1.05rem; font-weight: 600; color: #111827; }
@@ -175,6 +191,9 @@ st.markdown("""
     .score-pill.positive { background: #dcfce7; color: #15803d; }
     .score-pill.negative { background: #fee2e2; color: #b91c1c; }
     .score-pill.zero { background: #f1f5f9; color: #475569; }
+
+    .progress-track { width: 100%; height: 7px; background: #f1f5f9; border-radius: 999px; margin-top: 10px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg,#6366f1,#8b5cf6); }
 
     div[data-testid="stExpander"] { border: none; border-radius: 14px; overflow: hidden; }
     button[kind="secondary"], button[kind="primary"] { border-radius: 10px !important; }
@@ -187,6 +206,12 @@ AVATAR_COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#f97316", "#10b981", "#0ea5e9
 
 def avatar_color(name):
     return AVATAR_COLORS[sum(ord(c) for c in name) % len(AVATAR_COLORS)]
+
+
+def progress_pct(diem, diem_max):
+    if diem_max is None or diem_max <= 0 or diem <= 0:
+        return 0
+    return max(0, min(100, round(diem / diem_max * 100)))
 
 
 # ---------------------------------------------------------------
@@ -277,7 +302,7 @@ if not members_df.empty:
 
 
 # ---------------------------------------------------------------
-# FORM CỘNG / TRỪ ĐIỂM (chỉ Admin)
+# FORM CỘNG / TRỪ ĐIỂM (chỉ Admin) + Hoàn tác
 # ---------------------------------------------------------------
 if is_admin:
     with st.expander("📝 Form Cộng / Trừ Điểm", expanded=True):
@@ -301,12 +326,28 @@ if is_admin:
                     update_score(ten_duoc_chon, int(so_diem), ly_do.strip(), nguoi_ky.strip())
                     st.success(f"Đã cập nhật {so_diem:+} điểm cho {ten_duoc_chon}!")
                     st.rerun()
+
+        # --- Hoàn tác lần gần nhất ---
+        last_entry = load_last_entry()
+        if not last_entry.empty:
+            e = last_entry.iloc[0]
+            st.markdown("---")
+            st.caption(
+                f"Thao tác gần nhất: **{e['ten']}** {int(e['so_diem']):+d} điểm — "
+                f"{e['ly_do'] or '(không có lý do)'}"
+            )
+            if st.button("↩️ Hoàn tác thao tác này", use_container_width=True):
+                undo_entry(int(e["id"]), e["ten"], int(e["so_diem"]))
+                st.success("Đã hoàn tác!")
+                st.rerun()
     st.write("")
 
 
 # ---------------------------------------------------------------
-# BẢNG XẾP HẠNG
+# TÌM KIẾM
 # ---------------------------------------------------------------
+tu_khoa = st.text_input("🔍 Tìm thành viên:", placeholder="Nhập tên cần tìm...")
+
 st.subheader("📋 Bảng xếp hạng")
 
 MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
@@ -314,32 +355,106 @@ MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 if members_df.empty:
     st.info("Chưa có dữ liệu thành viên.")
 else:
-    for idx, row in members_df.reset_index(drop=True).iterrows():
-        rank = idx + 1
-        ten = row["name"]
-        diem = int(row["diem"])
+    ranked = list(members_df.reset_index(drop=True).iterrows())
+    diem_max = int(members_df["diem"].max())
 
-        top_class = f"top{rank}" if rank <= 3 else ""
-        badge = MEDALS.get(rank, str(rank))
-        badge_class = "medal" if rank <= 3 else ""
-        pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
-        chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
+    if tu_khoa.strip():
+        # --- Có tìm kiếm: bỏ podium, hiện danh sách khớp kèm đúng thứ hạng gốc ---
+        loc = tu_khoa.strip().lower()
+        ranked = [(idx, row) for idx, row in ranked if loc in str(row["name"]).lower()]
+        if not ranked:
+            st.info("Không tìm thấy thành viên nào khớp.")
 
-        st.markdown(
-            f"""
-            <div class="rank-card {top_class}">
-                <div class="rank-badge {badge_class}">{badge}</div>
-                <div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>
-                <div class="member-name">{ten}</div>
-                <div class="score-pill {pill_class}">{diem:+d} điểm</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        for idx, row in ranked:
+            rank = idx + 1
+            ten = row["name"]
+            diem = int(row["diem"])
+            top_class = ""
+            badge = MEDALS.get(rank, str(rank))
+            pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
+            chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
+            pct = progress_pct(diem, diem_max)
 
-        with st.expander(f"Xem lịch sử của {ten}"):
-            hist_df = load_history(ten)
-            if not hist_df.empty:
-                st.dataframe(hist_df, use_container_width=True, hide_index=True)
-            else:
-                st.caption("Chưa có lịch sử cộng/trừ điểm.")
+            st.markdown(
+                f"""
+                <div class="rank-card {top_class}">
+                    <div class="rank-card-top">
+                        <div class="rank-badge">{badge}</div>
+                        <div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>
+                        <div class="member-name">{ten}</div>
+                        <div class="score-pill {pill_class}">{diem:+d} điểm</div>
+                    </div>
+                    <div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            with st.expander(f"Xem lịch sử của {ten}"):
+                hist_df = load_history(ten)
+                if not hist_df.empty:
+                    st.dataframe(hist_df, use_container_width=True, hide_index=True)
+                else:
+                    st.caption("Chưa có lịch sử cộng/trừ điểm.")
+    else:
+        # --- Không tìm kiếm: hiện bục podium top 3 + danh sách hạng 4 trở đi ---
+        top3 = ranked[:3]
+        rest = ranked[3:]
+
+        if top3:
+            blocks_html = ""
+            classes = ["gold", "silver", "bronze"]
+            for i, (idx, row) in enumerate(top3):
+                rank = idx + 1
+                ten = row["name"]
+                diem = int(row["diem"])
+                chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
+                blocks_html += f"""
+                <div class="podium-block {classes[i]}">
+                    <div class="podium-medal">{MEDALS.get(rank, '')}</div>
+                    <div class="podium-avatar">{chu_cai_dau}</div>
+                    <div class="podium-name">{ten}</div>
+                    <div class="podium-score">{diem:+d} điểm</div>
+                </div>
+                """
+            st.markdown(f'<div class="podium-wrap">{blocks_html}</div>', unsafe_allow_html=True)
+
+        for idx, row in rest:
+            rank = idx + 1
+            ten = row["name"]
+            diem = int(row["diem"])
+            pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
+            chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
+            pct = progress_pct(diem, diem_max)
+
+            st.markdown(
+                f"""
+                <div class="rank-card">
+                    <div class="rank-card-top">
+                        <div class="rank-badge">{rank}</div>
+                        <div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>
+                        <div class="member-name">{ten}</div>
+                        <div class="score-pill {pill_class}">{diem:+d} điểm</div>
+                    </div>
+                    <div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            with st.expander(f"Xem lịch sử của {ten}"):
+                hist_df = load_history(ten)
+                if not hist_df.empty:
+                    st.dataframe(hist_df, use_container_width=True, hide_index=True)
+                else:
+                    st.caption("Chưa có lịch sử cộng/trừ điểm.")
+
+        # Lịch sử của top 3 (đặt dưới cùng để bục podium không quá dài)
+        if top3:
+            st.markdown("##### Lịch sử của top 3")
+            for idx, row in top3:
+                ten = row["name"]
+                with st.expander(f"Xem lịch sử của {ten}"):
+                    hist_df = load_history(ten)
+                    if not hist_df.empty:
+                        st.dataframe(hist_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.caption("Chưa có lịch sử cộng/trừ điểm.")
