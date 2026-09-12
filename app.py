@@ -10,7 +10,7 @@ from sqlalchemy import text
 #  trên database Postgres (Supabase) thay vì file JSON.
 # ============================================================
 
-st.set_page_config(page_title="Quản Lý Điểm Nhóm", layout="wide")
+st.set_page_config(page_title="Quản Lý Điểm Nhóm", page_icon="🏆", layout="wide")
 
 # --- Kết nối database ---------------------------------------------------
 # Cấu hình kết nối nằm trong Streamlit Secrets (mục [connections.supabase_db]),
@@ -45,7 +45,7 @@ init_db()
 
 # --- Truy vấn dữ liệu -----------------------------------------------------
 def load_members():
-    return conn.query("SELECT name, diem FROM members ORDER BY name", ttl=0)
+    return conn.query("SELECT name, diem FROM members ORDER BY diem DESC, name", ttl=0)
 
 
 def load_history(name):
@@ -121,7 +121,77 @@ def reset_all_scores():
         s.commit()
 
 
-# --- THANH BÊN (SIDEBAR): ĐĂNG NHẬP & CÔNG CỤ ADMIN ---
+# ---------------------------------------------------------------
+# CSS — giao diện đẹp hơn
+# ---------------------------------------------------------------
+st.markdown("""
+<style>
+    .block-container { padding-top: 1.5rem; max-width: 960px; }
+
+    .hero {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        border-radius: 20px;
+        padding: 28px 32px;
+        margin-bottom: 24px;
+        color: white;
+        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25);
+    }
+    .hero-title { font-size: 1.9rem; font-weight: 800; margin: 0; }
+    .hero-subtitle { opacity: 0.9; font-size: 0.95rem; margin-top: 4px; }
+
+    div[data-testid="stMetric"] {
+        background: #ffffff;
+        border: 1px solid #eef0f3;
+        border-radius: 14px;
+        padding: 12px 16px;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    }
+
+    .rank-card {
+        display: flex; align-items: center; gap: 16px;
+        background: #ffffff; border: 1px solid #eef0f3; border-radius: 16px;
+        padding: 14px 20px; margin-bottom: 10px;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .rank-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16, 24, 40, 0.08); }
+    .rank-card.top1 { border: 1px solid #fde68a; background: linear-gradient(90deg,#fffbeb,#ffffff); }
+    .rank-card.top2 { border: 1px solid #e5e7eb; background: linear-gradient(90deg,#f9fafb,#ffffff); }
+    .rank-card.top3 { border: 1px solid #fed7aa; background: linear-gradient(90deg,#fff7ed,#ffffff); }
+
+    .rank-badge { width: 40px; min-width: 40px; text-align: center; font-size: 1.2rem; font-weight: 800; color: #9ca3af; }
+    .rank-badge.medal { font-size: 1.7rem; }
+
+    .avatar {
+        width: 42px; height: 42px; min-width: 42px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 1rem; color: white;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    }
+
+    .member-name { flex: 1; font-size: 1.05rem; font-weight: 600; color: #111827; }
+
+    .score-pill { padding: 6px 16px; border-radius: 999px; font-weight: 800; font-size: 0.95rem; white-space: nowrap; }
+    .score-pill.positive { background: #dcfce7; color: #15803d; }
+    .score-pill.negative { background: #fee2e2; color: #b91c1c; }
+    .score-pill.zero { background: #f1f5f9; color: #475569; }
+
+    div[data-testid="stExpander"] { border: none; border-radius: 14px; overflow: hidden; }
+    button[kind="secondary"], button[kind="primary"] { border-radius: 10px !important; }
+</style>
+""", unsafe_allow_html=True)
+
+
+AVATAR_COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#f97316", "#10b981", "#0ea5e9", "#eab308"]
+
+
+def avatar_color(name):
+    return AVATAR_COLORS[sum(ord(c) for c in name) % len(AVATAR_COLORS)]
+
+
+# ---------------------------------------------------------------
+# SIDEBAR — Admin
+# ---------------------------------------------------------------
 st.sidebar.title("🔒 Quyền Admin")
 password = st.sidebar.text_input("Nhập mật khẩu Admin:", type="password")
 
@@ -133,7 +203,7 @@ if is_admin:
     st.sidebar.markdown("---")
     st.sidebar.subheader("➕ Thêm thành viên")
     ten_moi = st.sidebar.text_input("Tên thành viên mới:")
-    if st.sidebar.button("Thêm thành viên"):
+    if st.sidebar.button("Thêm thành viên", use_container_width=True):
         ten_moi = ten_moi.strip()
         existing = load_members()["name"].tolist()
         if ten_moi and ten_moi not in existing:
@@ -174,12 +244,28 @@ else:
     else:
         st.sidebar.info("Bạn đang ở chế độ Xem. Nhập mật khẩu để chỉnh sửa điểm.")
 
-# --- TRANG CHÍNH ---
-st.title("📊 Quản Lý Điểm Nhóm")
+
+# ---------------------------------------------------------------
+# HEADER
+# ---------------------------------------------------------------
+st.markdown(
+    """
+    <div class="hero">
+        <div class="hero-title">🏆 Quản Lý Điểm Nhóm</div>
+        <div class="hero-subtitle">Bảng xếp hạng điểm — cập nhật trực tiếp, mọi lúc mọi nơi</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 members_df = load_members()
 
 if not members_df.empty:
+    kpi1, kpi2, kpi3 = st.columns(3)
+    kpi1.metric("Số thành viên", len(members_df))
+    kpi2.metric("Điểm cao nhất", int(members_df["diem"].max()))
+    kpi3.metric("Tổng điểm", int(members_df["diem"].sum()))
+
     excel_bytes = to_excel_bytes(members_df, load_all_history())
     st.download_button(
         "⬇️ Xuất file Excel",
@@ -187,8 +273,12 @@ if not members_df.empty:
         file_name="diem_nhom.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+    st.write("")
 
-# Form cộng / trừ điểm (chỉ hiển thị nếu đúng mật khẩu Admin)
+
+# ---------------------------------------------------------------
+# FORM CỘNG / TRỪ ĐIỂM (chỉ Admin)
+# ---------------------------------------------------------------
 if is_admin:
     with st.expander("📝 Form Cộng / Trừ Điểm", expanded=True):
         if members_df.empty:
@@ -211,29 +301,45 @@ if is_admin:
                     update_score(ten_duoc_chon, int(so_diem), ly_do.strip(), nguoi_ky.strip())
                     st.success(f"Đã cập nhật {so_diem:+} điểm cho {ten_duoc_chon}!")
                     st.rerun()
+    st.write("")
 
-st.markdown("---")
 
-# --- HIỂN THỊ BẢNG ĐIỂM (Tất cả mọi người đều xem được) ---
-st.subheader("📋 Bảng Tổng Hợp & Lịch Sử")
+# ---------------------------------------------------------------
+# BẢNG XẾP HẠNG
+# ---------------------------------------------------------------
+st.subheader("📋 Bảng xếp hạng")
+
+MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
 if members_df.empty:
     st.info("Chưa có dữ liệu thành viên.")
 else:
-    cols = st.columns(2)
     for idx, row in members_df.reset_index(drop=True).iterrows():
+        rank = idx + 1
         ten = row["name"]
-        diem = row["diem"]
-        with cols[idx % 2]:
-            with st.container(border=True):
-                st.markdown(f"### **{ten}**")
-                color = "green" if diem >= 0 else "red"
-                st.markdown(
-                    f"Điểm hiện tại: <h3 style='display:inline; color:{color};'>{diem}</h3>",
-                    unsafe_allow_html=True,
-                )
-                hist_df = load_history(ten)
-                if not hist_df.empty:
-                    st.dataframe(hist_df, use_container_width=True, hide_index=True)
-                else:
-                    st.caption("Chưa có lịch sử cộng/trừ điểm.")
+        diem = int(row["diem"])
+
+        top_class = f"top{rank}" if rank <= 3 else ""
+        badge = MEDALS.get(rank, str(rank))
+        badge_class = "medal" if rank <= 3 else ""
+        pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
+        chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
+
+        st.markdown(
+            f"""
+            <div class="rank-card {top_class}">
+                <div class="rank-badge {badge_class}">{badge}</div>
+                <div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>
+                <div class="member-name">{ten}</div>
+                <div class="score-pill {pill_class}">{diem:+d} điểm</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        with st.expander(f"Xem lịch sử của {ten}"):
+            hist_df = load_history(ten)
+            if not hist_df.empty:
+                st.dataframe(hist_df, use_container_width=True, hide_index=True)
+            else:
+                st.caption("Chưa có lịch sử cộng/trừ điểm.")
