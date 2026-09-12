@@ -1,3 +1,6 @@
+import io
+
+import pandas as pd
 import streamlit as st
 from sqlalchemy import text
 
@@ -56,6 +59,26 @@ def load_history(name):
     )
 
 
+def load_all_history():
+    return conn.query(
+        """
+        SELECT ten AS "Thành viên", ngay AS "Ngày", so_diem AS "Điểm",
+               ly_do AS "Lý do", xac_nhan AS "Xác nhận"
+        FROM history ORDER BY ngay DESC
+        """,
+        ttl=0,
+    )
+
+
+def to_excel_bytes(members_df, history_df):
+    bang_diem = members_df.rename(columns={"name": "Thành viên", "diem": "Điểm hiện tại"})
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        bang_diem.to_excel(writer, index=False, sheet_name="Bang diem")
+        history_df.to_excel(writer, index=False, sheet_name="Lich su")
+    return buffer.getvalue()
+
+
 def add_member(name):
     with conn.session as s:
         s.execute(
@@ -78,6 +101,14 @@ def update_score(name, so_diem, ly_do, nguoi_ky):
             """),
             {"name": name, "d": so_diem, "ly_do": ly_do, "ky": nguoi_ky},
         )
+        s.commit()
+
+
+def delete_member(name):
+    """Xoá 1 thành viên khỏi bảng — lịch sử cộng/trừ của người đó cũng
+    tự động bị xoá theo (nhờ ON DELETE CASCADE), không thể hoàn tác."""
+    with conn.session as s:
+        s.execute(text("DELETE FROM members WHERE name = :name"), {"name": name})
         s.commit()
 
 
@@ -113,6 +144,20 @@ if is_admin:
             st.sidebar.error("Tên này đã tồn tại!")
 
     st.sidebar.markdown("---")
+    st.sidebar.subheader("🗑️ Xoá thành viên")
+    existing_for_delete = load_members()["name"].tolist()
+    if existing_for_delete:
+        ten_xoa = st.sidebar.selectbox("Chọn thành viên cần xoá:", existing_for_delete, key="ten_xoa_select")
+        st.sidebar.caption("⚠️ Xoá luôn cả lịch sử cộng/trừ điểm của người này. Không thể hoàn tác.")
+        xac_nhan_xoa = st.sidebar.checkbox("Tôi chắc chắn muốn xoá thành viên này", key="xac_nhan_xoa_thanh_vien")
+        if st.sidebar.button("🗑️ Xoá thành viên", use_container_width=True, disabled=not xac_nhan_xoa):
+            delete_member(ten_xoa)
+            st.sidebar.success(f"Đã xoá {ten_xoa}!")
+            st.rerun()
+    else:
+        st.sidebar.caption("Chưa có thành viên nào để xoá.")
+
+    st.sidebar.markdown("---")
     st.sidebar.subheader("🔄 Reset điểm tuần mới")
     st.sidebar.caption(
         "⚠️ Đưa điểm TẤT CẢ mọi người về 0 VÀ XOÁ VĨNH VIỄN toàn bộ lịch sử "
@@ -133,6 +178,15 @@ else:
 st.title("📊 Quản Lý Điểm Nhóm")
 
 members_df = load_members()
+
+if not members_df.empty:
+    excel_bytes = to_excel_bytes(members_df, load_all_history())
+    st.download_button(
+        "⬇️ Xuất file Excel",
+        data=excel_bytes,
+        file_name="diem_nhom.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 # Form cộng / trừ điểm (chỉ hiển thị nếu đúng mật khẩu Admin)
 if is_admin:
