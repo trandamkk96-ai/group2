@@ -1,8 +1,16 @@
 import io
+from datetime import date, timedelta
 
 import pandas as pd
 import streamlit as st
 from sqlalchemy import text
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 # ============================================================
 #  QUẢN LÝ ĐIỂM NHÓM — phiên bản chạy trên web (mọi thiết bị,
@@ -53,26 +61,88 @@ def load_members():
     return conn.query("SELECT name, diem FROM members ORDER BY diem DESC, name", ttl=0)
 
 
-def load_history(name):
+def load_history(name, start=None, end=None):
+    """start/end: đối tượng date (Python). end được hiểu là bao gồm luôn cả ngày đó."""
+    query = (
+        'SELECT ngay AS "Ngày", so_diem AS "Điểm", ly_do AS "Lý do", xac_nhan AS "Xác nhận" '
+        'FROM history WHERE ten = :ten'
+    )
+    params = {"ten": name}
+    if start is not None:
+        query += ' AND ngay >= :start'
+        params["start"] = start
+    if end is not None:
+        query += ' AND ngay < :end'
+        params["end"] = end + timedelta(days=1)
+    query += ' ORDER BY ngay DESC'
+    return conn.query(query, params=params, ttl=0)
+
+
+def load_all_history(start=None, end=None):
+    query = (
+        'SELECT ten AS "Thành viên", ngay AS "Ngày", so_diem AS "Điểm", '
+        '       ly_do AS "Lý do", xac_nhan AS "Xác nhận" FROM history WHERE 1=1'
+    )
+    params = {}
+    if start is not None:
+        query += ' AND ngay >= :start'
+        params["start"] = start
+    if end is not None:
+        query += ' AND ngay < :end'
+        params["end"] = end + timedelta(days=1)
+    query += ' ORDER BY ngay DESC'
+    return conn.query(query, params=params, ttl=0)
+
+
+def load_recent_entries(name, limit=10):
+    """Lấy vài lần cộng/trừ gần nhất của 1 người (không áp dụng lọc ngày) — dùng để tính huy hiệu."""
     return conn.query(
-        """
-        SELECT ngay AS "Ngày", so_diem AS "Điểm", ly_do AS "Lý do", xac_nhan AS "Xác nhận"
-        FROM history WHERE ten = :ten ORDER BY ngay DESC
-        """,
-        params={"ten": name},
+        'SELECT so_diem FROM history WHERE ten = :ten ORDER BY ngay DESC, id DESC LIMIT :lim',
+        params={"ten": name, "lim": limit},
         ttl=0,
     )
 
 
-def load_all_history():
-    return conn.query(
-        """
-        SELECT ten AS "Thành viên", ngay AS "Ngày", so_diem AS "Điểm",
-               ly_do AS "Lý do", xac_nhan AS "Xác nhận"
-        FROM history ORDER BY ngay DESC
-        """,
-        ttl=0,
-    )
+def load_trend_series(name=None):
+    """Điểm cộng dồn theo thời gian — cho 1 người, hoặc cả nhóm nếu name=None."""
+    if name:
+        df = conn.query(
+            'SELECT ngay AS "Ngày", so_diem FROM history WHERE ten = :ten ORDER BY ngay ASC',
+            params={"ten": name},
+            ttl=0,
+        )
+    else:
+        df = conn.query('SELECT ngay AS "Ngày", so_diem FROM history ORDER BY ngay ASC', ttl=0)
+    if df.empty:
+        return df
+    df["Điểm cộng dồn"] = df["so_diem"].cumsum()
+    return df.set_index("Ngày")[["Điểm cộng dồn"]]
+
+
+def compute_badges(name, diem, diem_max):
+    badges = []
+    if diem_max is not None and diem_max > 0 and diem == diem_max:
+        badges.append("🏅 Đang dẫn đầu")
+    recent = load_recent_entries(name, limit=10)
+    if not recent.empty:
+        vals = recent["so_diem"].tolist()
+        streak_up = 0
+        for v in vals:
+            if v > 0:
+                streak_up += 1
+            else:
+                break
+        if streak_up >= 3:
+            badges.append(f"🔥 {streak_up} lần liên tiếp được cộng điểm")
+        streak_down = 0
+        for v in vals:
+            if v < 0:
+                streak_down += 1
+            else:
+                break
+        if streak_down >= 3:
+            badges.append(f"⚠️ {streak_down} lần liên tiếp bị trừ điểm")
+    return badges
 
 
 def load_last_entry():
@@ -89,6 +159,72 @@ def to_excel_bytes(members_df, history_df):
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         bang_diem.to_excel(writer, index=False, sheet_name="Bang diem")
         history_df.to_excel(writer, index=False, sheet_name="Lich su")
+    return buffer.getvalue()
+
+
+@st.cache_resource
+def _register_pdf_fonts():
+    pdfmetrics.registerFont(TTFont("DejaVuSans", "fonts/DejaVuSans.ttf"))
+    pdfmetrics.registerFont(TTFont("DejaVuSans-Bold", "fonts/DejaVuSans-Bold.ttf"))
+    return True
+
+
+def _pdf_table(data, col_widths, header_bold=True):
+    t = Table(data, colWidths=col_widths, repeatRows=1)
+    style = [
+        ("FONTNAME", (0, 0), (-1, -1), "DejaVuSans"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e5e7eb")),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#6366f1")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]
+    if header_bold:
+        style.append(("FONTNAME", (0, 0), (-1, 0), "DejaVuSans-Bold"))
+    t.setStyle(TableStyle(style))
+    return t
+
+
+def to_pdf_bytes(members_df, history_df, tieu_de="Bao cao diem nhom"):
+    _register_pdf_fonts()
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4,
+        topMargin=1.8 * cm, bottomMargin=1.8 * cm, leftMargin=1.5 * cm, rightMargin=1.5 * cm,
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("VNTitle", parent=styles["Title"], fontName="DejaVuSans-Bold", fontSize=18)
+    heading_style = ParagraphStyle("VNHeading", parent=styles["Heading2"], fontName="DejaVuSans-Bold", fontSize=13)
+    normal_style = ParagraphStyle("VNNormal", parent=styles["Normal"], fontName="DejaVuSans", fontSize=10)
+
+    elements = [Paragraph("Báo Cáo Điểm Nhóm", title_style), Spacer(1, 14)]
+
+    elements.append(Paragraph("Bảng điểm hiện tại", heading_style))
+    elements.append(Spacer(1, 6))
+    diem_data = [["Thành viên", "Điểm hiện tại"]] + [
+        [str(r["name"]), str(int(r["diem"]))] for _, r in members_df.iterrows()
+    ]
+    elements.append(_pdf_table(diem_data, [10 * cm, 5 * cm]))
+    elements.append(Spacer(1, 20))
+
+    elements.append(Paragraph("Lịch sử cộng / trừ điểm", heading_style))
+    elements.append(Spacer(1, 6))
+    if history_df.empty:
+        elements.append(Paragraph("Chưa có lịch sử.", normal_style))
+    else:
+        hist_data = [["Thành viên", "Ngày", "Điểm", "Lý do", "Xác nhận"]]
+        for _, r in history_df.iterrows():
+            ngay_str = r["Ngày"].strftime("%d/%m/%Y %H:%M") if pd.notna(r["Ngày"]) else ""
+            hist_data.append([
+                str(r["Thành viên"]), ngay_str, f'{int(r["Điểm"]):+d}',
+                str(r["Lý do"] or ""), str(r["Xác nhận"] or ""),
+            ])
+        elements.append(_pdf_table(hist_data, [3 * cm, 3 * cm, 1.7 * cm, 5.3 * cm, 2.5 * cm]))
+
+    doc.build(elements)
     return buffer.getvalue()
 
 
@@ -223,6 +359,14 @@ st.markdown("""
     .progress-track { width: 100%; height: 7px; background: #f1f5f9; border-radius: 999px; margin-top: 10px; overflow: hidden; }
     .progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg,#6366f1,#8b5cf6); }
 
+    .badge-row { margin-top: 8px; }
+    .badge-chip {
+        display: inline-block; background: #eef2ff; color: #4338ca; border-radius: 999px;
+        padding: 3px 10px; font-size: 0.72rem; font-weight: 700; margin: 3px 4px 0 0;
+    }
+    .podium-badges { margin-top: 6px; }
+    .podium-badges .badge-chip { background: rgba(255,255,255,0.28); color: #ffffff; }
+
     div[data-testid="stExpander"] { border: none; border-radius: 14px; overflow: hidden; }
     button[kind="secondary"], button[kind="primary"] { border-radius: 10px !important; }
 </style>
@@ -240,6 +384,15 @@ def progress_pct(diem, diem_max):
     if diem_max is None or diem_max <= 0 or diem <= 0:
         return 0
     return max(0, min(100, round(diem / diem_max * 100)))
+
+
+def badges_html(name, diem, diem_max, extra_class=""):
+    badges = compute_badges(name, diem, diem_max)
+    if not badges:
+        return ""
+    chips = "".join(f'<span class="badge-chip">{b}</span>' for b in badges)
+    cls = f"badge-row {extra_class}".strip()
+    return f'<div class="{cls}">{chips}</div>'
 
 
 # ---------------------------------------------------------------
@@ -326,19 +479,46 @@ st.markdown(
 
 members_df = load_members()
 
+# ---------------------------------------------------------------
+# LỌC LỊCH SỬ THEO KHOẢNG THỜI GIAN (áp dụng cho lịch sử xem + xuất file)
+# ---------------------------------------------------------------
+with st.expander("📅 Lọc lịch sử theo khoảng thời gian"):
+    loc_theo_ngay = st.checkbox("Chỉ xem lịch sử trong khoảng ngày cụ thể")
+    if loc_theo_ngay:
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            start_dt = st.date_input("Từ ngày:", value=date.today() - timedelta(days=7))
+        with col_d2:
+            end_dt = st.date_input("Đến ngày:", value=date.today())
+    else:
+        start_dt, end_dt = None, None
+        st.caption("Đang hiển thị toàn bộ lịch sử (chưa lọc theo ngày).")
+
 if not members_df.empty:
     kpi1, kpi2, kpi3 = st.columns(3)
     kpi1.metric("Số thành viên", len(members_df))
     kpi2.metric("Điểm cao nhất", int(members_df["diem"].max()))
     kpi3.metric("Tổng điểm", int(members_df["diem"].sum()))
 
-    excel_bytes = to_excel_bytes(members_df, load_all_history())
-    st.download_button(
-        "⬇️ Xuất file Excel",
-        data=excel_bytes,
-        file_name="diem_nhom.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    excel_bytes = to_excel_bytes(members_df, load_all_history(start_dt, end_dt))
+    pdf_bytes = to_pdf_bytes(members_df, load_all_history(start_dt, end_dt))
+    col_exp1, col_exp2 = st.columns(2)
+    with col_exp1:
+        st.download_button(
+            "⬇️ Xuất file Excel",
+            data=excel_bytes,
+            file_name="diem_nhom.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
+    with col_exp2:
+        st.download_button(
+            "⬇️ Xuất file PDF",
+            data=pdf_bytes,
+            file_name="diem_nhom.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
     st.write("")
 
 
@@ -425,11 +605,12 @@ else:
                 f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
                 f'</div>'
                 f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
+                f'{badges_html(ten, diem, diem_max)}'
                 f'</div>'
             )
             st.markdown(card_html, unsafe_allow_html=True)
             with st.expander(f"Xem lịch sử của {ten}"):
-                hist_df = load_history(ten)
+                hist_df = load_history(ten, start_dt, end_dt)
                 if not hist_df.empty:
                     st.dataframe(hist_df, use_container_width=True, hide_index=True)
                 else:
@@ -453,6 +634,7 @@ else:
                     f'<div class="podium-avatar">{chu_cai_dau}</div>'
                     f'<div class="podium-name">{ten}</div>'
                     f'<div class="podium-score">{diem:+d} điểm</div>'
+                    f'{badges_html(ten, diem, diem_max, "podium-badges")}'
                     f'</div>'
                 )
             st.markdown(f'<div class="podium-wrap">{blocks_html}</div>', unsafe_allow_html=True)
@@ -474,11 +656,12 @@ else:
                 f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
                 f'</div>'
                 f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
+                f'{badges_html(ten, diem, diem_max)}'
                 f'</div>'
             )
             st.markdown(card_html, unsafe_allow_html=True)
             with st.expander(f"Xem lịch sử của {ten}"):
-                hist_df = load_history(ten)
+                hist_df = load_history(ten, start_dt, end_dt)
                 if not hist_df.empty:
                     st.dataframe(hist_df, use_container_width=True, hide_index=True)
                 else:
@@ -490,11 +673,26 @@ else:
             for idx, row in top3:
                 ten = row["name"]
                 with st.expander(f"Xem lịch sử của {ten}"):
-                    hist_df = load_history(ten)
+                    hist_df = load_history(ten, start_dt, end_dt)
                     if not hist_df.empty:
                         st.dataframe(hist_df, use_container_width=True, hide_index=True)
                     else:
                         st.caption("Chưa có lịch sử cộng/trừ điểm.")
+
+
+# ---------------------------------------------------------------
+# XU HƯỚNG ĐIỂM
+# ---------------------------------------------------------------
+if not members_df.empty:
+    st.markdown("---")
+    st.subheader("📈 Xu hướng điểm")
+    trend_options = ["Cả nhóm"] + members_df["name"].tolist()
+    trend_pick = st.selectbox("Xem xu hướng của:", trend_options, key="trend_select")
+    trend_df = load_trend_series(None if trend_pick == "Cả nhóm" else trend_pick)
+    if trend_df.empty:
+        st.caption("Chưa có dữ liệu để vẽ biểu đồ.")
+    else:
+        st.line_chart(trend_df)
 
 
 # ---------------------------------------------------------------
