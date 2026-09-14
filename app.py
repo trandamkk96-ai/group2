@@ -34,6 +34,14 @@ def init_db():
                 xac_nhan TEXT
             )
         """))
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS feedback (
+                id SERIAL PRIMARY KEY,
+                nguoi_gui TEXT,
+                noi_dung TEXT NOT NULL,
+                ngay TIMESTAMP NOT NULL DEFAULT now()
+            )
+        """))
         s.commit()
 
 
@@ -127,6 +135,26 @@ def reset_all_scores():
     with conn.session as s:
         s.execute(text("UPDATE members SET diem = 0"))
         s.execute(text("DELETE FROM history"))
+        s.commit()
+
+
+def add_feedback(nguoi_gui, noi_dung):
+    with conn.session as s:
+        s.execute(
+            text("INSERT INTO feedback (nguoi_gui, noi_dung) VALUES (:ng, :nd)"),
+            {"ng": nguoi_gui, "nd": noi_dung},
+        )
+        s.commit()
+
+
+def load_feedback():
+    """Chỉ Admin gọi hàm này để đọc góp ý — không hiển thị công khai ở đâu khác."""
+    return conn.query('SELECT id, nguoi_gui, noi_dung, ngay FROM feedback ORDER BY ngay DESC', ttl=0)
+
+
+def delete_feedback(feedback_id):
+    with conn.session as s:
+        s.execute(text("DELETE FROM feedback WHERE id = :id"), {"id": feedback_id})
         s.commit()
 
 
@@ -263,6 +291,21 @@ if is_admin:
         reset_all_scores()
         st.sidebar.success("Đã reset điểm về 0 và xoá sạch lịch sử cũ!")
         st.rerun()
+
+    st.sidebar.markdown("---")
+    feedback_df = load_feedback()
+    st.sidebar.subheader(f"📬 Hộp góp ý ({len(feedback_df)})")
+    if feedback_df.empty:
+        st.sidebar.caption("Chưa có góp ý nào.")
+    else:
+        for _, fb in feedback_df.iterrows():
+            thoi_gian = fb["ngay"].strftime("%d/%m %H:%M") if pd.notna(fb["ngay"]) else ""
+            nguoi = fb["nguoi_gui"] or "Ẩn danh"
+            with st.sidebar.expander(f"{nguoi} — {thoi_gian}"):
+                st.write(fb["noi_dung"])
+                if st.button("🗑️ Xoá góp ý này", key=f"del_fb_{fb['id']}", use_container_width=True):
+                    delete_feedback(int(fb["id"]))
+                    st.rerun()
 else:
     if password:
         st.sidebar.error("Mật khẩu chưa đúng")
@@ -452,3 +495,21 @@ else:
                         st.dataframe(hist_df, use_container_width=True, hide_index=True)
                     else:
                         st.caption("Chưa có lịch sử cộng/trừ điểm.")
+
+
+# ---------------------------------------------------------------
+# GÓP Ý (ai cũng gửi được — chỉ Admin mới đọc được, ở sidebar)
+# ---------------------------------------------------------------
+st.markdown("---")
+st.subheader("💬 Gửi góp ý")
+st.caption("Góp ý của bạn chỉ Admin đọc được, không hiển thị công khai cho người khác xem.")
+with st.form("form_gop_y", clear_on_submit=True):
+    nguoi_gui_fb = st.text_input("Tên bạn (để trống nếu muốn ẩn danh):")
+    noi_dung_fb = st.text_area("Nội dung góp ý:")
+    da_gui = st.form_submit_button("Gửi góp ý", use_container_width=True)
+    if da_gui:
+        if noi_dung_fb.strip():
+            add_feedback(nguoi_gui_fb.strip() or "Ẩn danh", noi_dung_fb.strip())
+            st.success("Cảm ơn bạn đã góp ý!")
+        else:
+            st.error("Vui lòng nhập nội dung góp ý.")
