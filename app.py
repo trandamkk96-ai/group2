@@ -94,11 +94,21 @@ def load_all_history(start=None, end=None):
     return conn.query(query, params=params, ttl=0)
 
 
-def load_recent_entries(name, limit=10):
-    """Lấy vài lần cộng/trừ gần nhất của 1 người (không áp dụng lọc ngày) — dùng để tính huy hiệu."""
+def load_recent_all(limit_per_member=10):
+    """Lấy tối đa `limit_per_member` lần cộng/trừ gần nhất của MỖI thành viên, gộp trong 1 lượt
+    truy vấn database duy nhất (thay vì hỏi riêng từng người) — để trang mở nhanh hơn, đặc biệt
+    trên điện thoại mạng chậm."""
     return conn.query(
-        'SELECT so_diem FROM history WHERE ten = :ten ORDER BY ngay DESC, id DESC LIMIT :lim',
-        params={"ten": name, "lim": limit},
+        """
+        SELECT ten, so_diem FROM (
+            SELECT ten, so_diem,
+                   ROW_NUMBER() OVER (PARTITION BY ten ORDER BY ngay DESC, id DESC) AS rn
+            FROM history
+        ) t
+        WHERE rn <= :lim
+        ORDER BY ten, rn
+        """,
+        params={"lim": limit_per_member},
         ttl=0,
     )
 
@@ -119,13 +129,12 @@ def load_trend_series(name=None):
     return df.set_index("Ngày")[["Điểm cộng dồn"]]
 
 
-def compute_badges(name, diem, diem_max):
+def compute_badges(vals, diem, diem_max):
+    """vals: danh sách so_diem gần nhất của người này (mới nhất trước), lấy sẵn từ load_recent_all."""
     badges = []
     if diem_max is not None and diem_max > 0 and diem == diem_max:
         badges.append("🏅 Đang dẫn đầu")
-    recent = load_recent_entries(name, limit=10)
-    if not recent.empty:
-        vals = recent["so_diem"].tolist()
+    if vals:
         streak_up = 0
         for v in vals:
             if v > 0:
@@ -386,8 +395,8 @@ def progress_pct(diem, diem_max):
     return max(0, min(100, round(diem / diem_max * 100)))
 
 
-def badges_html(name, diem, diem_max, extra_class=""):
-    badges = compute_badges(name, diem, diem_max)
+def badges_html(name, diem, diem_max, recent_map, extra_class=""):
+    badges = compute_badges(recent_map.get(name, []), diem, diem_max)
     if not badges:
         return ""
     chips = "".join(f'<span class="badge-chip">{b}</span>' for b in badges)
@@ -500,25 +509,30 @@ if not members_df.empty:
     kpi2.metric("Điểm cao nhất", int(members_df["diem"].max()))
     kpi3.metric("Tổng điểm", int(members_df["diem"].sum()))
 
-    excel_bytes = to_excel_bytes(members_df, load_all_history(start_dt, end_dt))
-    pdf_bytes = to_pdf_bytes(members_df, load_all_history(start_dt, end_dt))
-    col_exp1, col_exp2 = st.columns(2)
-    with col_exp1:
-        st.download_button(
-            "⬇️ Xuất file Excel",
-            data=excel_bytes,
-            file_name="diem_nhom.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-        )
-    with col_exp2:
-        st.download_button(
-            "⬇️ Xuất file PDF",
-            data=pdf_bytes,
-            file_name="diem_nhom.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-        )
+    muon_xuat_file = st.checkbox(
+        "Chuẩn bị file để xuất (Excel / PDF) — chỉ tạo file khi bấm vào đây, giúp trang mở nhanh hơn",
+        key="muon_xuat_file",
+    )
+    if muon_xuat_file:
+        excel_bytes = to_excel_bytes(members_df, load_all_history(start_dt, end_dt))
+        pdf_bytes = to_pdf_bytes(members_df, load_all_history(start_dt, end_dt))
+        col_exp1, col_exp2 = st.columns(2)
+        with col_exp1:
+            st.download_button(
+                "⬇️ Xuất file Excel",
+                data=excel_bytes,
+                file_name="diem_nhom.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+        with col_exp2:
+            st.download_button(
+                "⬇️ Xuất file PDF",
+                data=pdf_bytes,
+                file_name="diem_nhom.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
     st.write("")
 
 
@@ -579,6 +593,24 @@ else:
     ranked = list(members_df.reset_index(drop=True).iterrows())
     diem_max = int(members_df["diem"].max())
 
+    # Lấy sẵn lịch sử gần đây của TẤT CẢ thành viên trong 1 lượt truy vấn duy nhất
+    # (thay vì mỗi thẻ xếp hạng tự hỏi database riêng) để trang mở nhanh hơn trên điện thoại,
+    # và tránh làm hết chỗ (pool) kết nối database khi có nhiều thành viên / nhiều người xem
+    # cùng lúc (đây là nguyên nhân gây lỗi "TimeoutError" trước đó).
+    recent_all_df = load_recent_all(limit_per_member=10)
+    recent_map = {}
+    if not recent_all_df.empty:
+        for ten_gr, grp in recent_all_df.groupby("ten", sort=False):
+            recent_map[ten_gr] = grp["so_diem"].tolist()
+
+    # Lấy sẵn TOÀN BỘ lịch sử (đã áp dụng lọc ngày nếu có) trong 1 lượt truy vấn duy nhất,
+    # rồi chia theo từng thành viên — thay vì mỗi ô "Xem lịch sử" tự hỏi database riêng.
+    all_hist_df = load_all_history(start_dt, end_dt)
+    hist_by_member = {}
+    if not all_hist_df.empty:
+        for ten_h, grp in all_hist_df.groupby("Thành viên", sort=False):
+            hist_by_member[ten_h] = grp.drop(columns=["Thành viên"])
+
     if tu_khoa.strip():
         # --- Có tìm kiếm: bỏ podium, hiện danh sách khớp kèm đúng thứ hạng gốc ---
         loc = tu_khoa.strip().lower()
@@ -605,12 +637,12 @@ else:
                 f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
                 f'</div>'
                 f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
-                f'{badges_html(ten, diem, diem_max)}'
+                f'{badges_html(ten, diem, diem_max, recent_map)}'
                 f'</div>'
             )
             st.markdown(card_html, unsafe_allow_html=True)
             with st.expander(f"Xem lịch sử của {ten}"):
-                hist_df = load_history(ten, start_dt, end_dt)
+                hist_df = hist_by_member.get(ten, pd.DataFrame())
                 if not hist_df.empty:
                     st.dataframe(hist_df, use_container_width=True, hide_index=True)
                 else:
@@ -634,7 +666,7 @@ else:
                     f'<div class="podium-avatar">{chu_cai_dau}</div>'
                     f'<div class="podium-name">{ten}</div>'
                     f'<div class="podium-score">{diem:+d} điểm</div>'
-                    f'{badges_html(ten, diem, diem_max, "podium-badges")}'
+                    f'{badges_html(ten, diem, diem_max, recent_map, "podium-badges")}'
                     f'</div>'
                 )
             st.markdown(f'<div class="podium-wrap">{blocks_html}</div>', unsafe_allow_html=True)
@@ -656,12 +688,12 @@ else:
                 f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
                 f'</div>'
                 f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
-                f'{badges_html(ten, diem, diem_max)}'
+                f'{badges_html(ten, diem, diem_max, recent_map)}'
                 f'</div>'
             )
             st.markdown(card_html, unsafe_allow_html=True)
             with st.expander(f"Xem lịch sử của {ten}"):
-                hist_df = load_history(ten, start_dt, end_dt)
+                hist_df = hist_by_member.get(ten, pd.DataFrame())
                 if not hist_df.empty:
                     st.dataframe(hist_df, use_container_width=True, hide_index=True)
                 else:
@@ -673,7 +705,7 @@ else:
             for idx, row in top3:
                 ten = row["name"]
                 with st.expander(f"Xem lịch sử của {ten}"):
-                    hist_df = load_history(ten, start_dt, end_dt)
+                    hist_df = hist_by_member.get(ten, pd.DataFrame())
                     if not hist_df.empty:
                         st.dataframe(hist_df, use_container_width=True, hide_index=True)
                     else:
@@ -686,13 +718,18 @@ else:
 if not members_df.empty:
     st.markdown("---")
     st.subheader("📈 Xu hướng điểm")
-    trend_options = ["Cả nhóm"] + members_df["name"].tolist()
-    trend_pick = st.selectbox("Xem xu hướng của:", trend_options, key="trend_select")
-    trend_df = load_trend_series(None if trend_pick == "Cả nhóm" else trend_pick)
-    if trend_df.empty:
-        st.caption("Chưa có dữ liệu để vẽ biểu đồ.")
-    else:
-        st.line_chart(trend_df)
+    hien_bieu_do = st.checkbox(
+        "Hiện biểu đồ xu hướng (chỉ tải khi bấm vào đây, giúp trang mở nhanh hơn trên điện thoại)",
+        key="hien_trend",
+    )
+    if hien_bieu_do:
+        trend_options = ["Cả nhóm"] + members_df["name"].tolist()
+        trend_pick = st.selectbox("Xem xu hướng của:", trend_options, key="trend_select")
+        trend_df = load_trend_series(None if trend_pick == "Cả nhóm" else trend_pick)
+        if trend_df.empty:
+            st.caption("Chưa có dữ liệu để vẽ biểu đồ.")
+        else:
+            st.line_chart(trend_df)
 
 
 # ---------------------------------------------------------------
