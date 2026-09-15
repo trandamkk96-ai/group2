@@ -31,6 +31,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("15/09/2026", "📅 Thêm banner \"Hôm nay học gì\" ngay trên Trang chủ — tự lấy đúng lịch của hôm đó từ tab Thời khóa biểu theo giờ Hà Nội, khỏi cần bấm qua tab riêng để xem."),
     ("15/09/2026", "📅 Thêm tab Thời khóa biểu (kế bên Trang chủ) — ai cũng xem được, Admin sửa thẳng trên web trong 10 giây (không cần vào GitHub nữa): mở tab này → bấm \"Sửa thời khóa biểu\" → gõ lại → Lưu là xong ngay."),
     ("15/09/2026", "⚡ Giảm tải cho điện thoại yếu: bớt bớt số sao/sao băng chạy hoạt ảnh ở Chế độ tối (trang mượt hơn hẳn), điện thoại màn nhỏ tự động bớt thêm một nửa sao băng, máy nào bật \"Giảm chuyển động\" thì web tự tắt hẳn hoạt ảnh trang trí."),
     ("15/09/2026", "🕒 Tự động đổi giao diện theo giờ Hà Nội — giờ BẬT SẴN mặc định, ai mở trang cũng tự đúng giờ luôn (sau 18h tối tự Chế độ tối, sau 6h sáng tự Chế độ sáng), không cần bấm gì; vẫn có thể tắt tự động để tự chọn thủ công. Chế độ sáng giờ cũng có \"bầu trời\" riêng cho hợp với Chế độ tối: nền trời xanh nhạt, mặt trời phát sáng, mây trôi nhẹ nhàng."),
@@ -452,6 +453,15 @@ def _dang_la_ban_dem_o_ha_noi() -> bool:
     return gio >= 18 or gio < 6
 
 
+# Python: Thứ 2=0 ... Chủ nhật=6 (datetime.weekday()) — đổi sang đúng cách gọi thứ ở VN,
+# để khớp với nhãn "Thứ x" trong Thời khóa biểu.
+_TEN_THU_VN = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "CN"]
+
+
+def _thu_hom_nay_ha_noi() -> str:
+    return _TEN_THU_VN[datetime.now(GIO_HA_NOI).weekday()]
+
+
 auto_theme = st.sidebar.toggle(
     "🕒 Tự động theo giờ Hà Nội",
     value=True,  # MẶC ĐỊNH BẬT — ai mở trang cũng tự đúng giờ luôn, không cần bấm gì cả.
@@ -590,6 +600,20 @@ st.markdown(f"""
     }}
     .home-news-label {{ font-size: 0.72rem; font-weight: 800; text-transform: uppercase; opacity: 0.85; letter-spacing: 0.03em; }}
     .home-news-text {{ font-size: 1rem; font-weight: 600; margin-top: 4px; line-height: 1.5; white-space: pre-wrap; }}
+
+    /* --- Banner "Hôm nay học gì" trên Trang chủ, tự lấy theo thứ hôm nay --- */
+    .home-tkb-banner {{
+        background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+        border-radius: 14px; padding: 14px 20px; margin-bottom: 20px; color: white;
+        box-shadow: 0 6px 16px rgba(14, 165, 233, 0.25);
+        animation: fadeInUp 0.4s ease both;
+    }}
+    .home-tkb-banner.nghi {{
+        background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
+        box-shadow: 0 6px 16px rgba(100, 116, 139, 0.2);
+    }}
+    .home-tkb-label {{ font-size: 0.72rem; font-weight: 800; text-transform: uppercase; opacity: 0.85; letter-spacing: 0.03em; }}
+    .home-tkb-text {{ font-size: 1rem; font-weight: 600; margin-top: 4px; line-height: 1.5; }}
 
     /* --- Danh sách "Cập nhật mới nhất" dạng timeline --- */
     .update-item {{
@@ -988,6 +1012,30 @@ with tab_home:
         '</div>',
         unsafe_allow_html=True,
     )
+
+    # --- "Hôm nay học gì" — tự lấy từ tab Thời khóa biểu theo đúng thứ hôm nay (giờ Hà Nội) ---
+    thu_hom_nay = _thu_hom_nay_ha_noi()
+    tkb_now_df = load_thoikhoabieu_hien_tai()
+    noi_dung_tkb_now = tkb_now_df.iloc[0]["noi_dung"] if not tkb_now_df.empty else TKB_MAC_DINH
+    _, cac_ngay_hom_nay = _tach_dong_tkb(noi_dung_tkb_now)
+    mon_hoc_hom_nay = next((mon for thu, mon in cac_ngay_hom_nay if thu == thu_hom_nay), None)
+
+    if mon_hoc_hom_nay:
+        st.markdown(
+            '<div class="home-tkb-banner">'
+            f'<div class="home-tkb-label">📅 Hôm nay ({html.escape(thu_hom_nay)}) học:</div>'
+            f'<div class="home-tkb-text">{html.escape(mon_hoc_hom_nay)}</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="home-tkb-banner nghi">'
+            f'<div class="home-tkb-label">📅 Hôm nay ({html.escape(thu_hom_nay)})</div>'
+            '<div class="home-tkb-text">🎉 Không có lịch học trong Thời khóa biểu.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
     # --- Tin mới nhất (nếu Admin có đăng ở tab "📰 Tin tức") ---
     # Không đăng gì thì không hiện gì ở đây cả — trang chủ vẫn như bình thường.
