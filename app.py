@@ -28,7 +28,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("15/09/2026", "Thêm mã QR mở nhanh, Nhật ký hoạt động chung, 2 tab Trang chủ / Cập nhật."),
+    ("15/09/2026", "Thêm sắp xếp theo tên A-Z, giao diện sinh động hơn (hiệu ứng xuất hiện, bục vàng phát sáng, tab bo tròn). Mã QR mở nhanh, Nhật ký hoạt động chung, 2 tab Trang chủ / Cập nhật."),
     ("14/09/2026", "Thêm bộ lọc lịch sử theo ngày, biểu đồ xu hướng điểm, huy hiệu thành tích, xuất file PDF."),
     ("12/09/2026", "Thêm hộp góp ý (chỉ Admin đọc), avatar, bục podium top 3, tìm kiếm thành viên, hoàn tác."),
 ]
@@ -355,13 +355,29 @@ st.markdown("""
         padding: 12px 16px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
     }
 
+    /* --- Hiệu ứng xuất hiện nhẹ nhàng cho các thẻ --- */
+    @keyframes fadeInUp {
+        from { opacity: 0; transform: translateY(14px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes goldGlow {
+        0%, 100% { box-shadow: 0 6px 16px rgba(245, 158, 11, 0.35); }
+        50% { box-shadow: 0 10px 30px rgba(245, 158, 11, 0.65); }
+    }
+
     /* --- Podium top 3 --- */
     .podium-wrap { display: flex; align-items: flex-end; justify-content: center; gap: 14px; margin: 8px 0 26px; }
     .podium-block {
         flex: 1; max-width: 220px; border-radius: 16px 16px 6px 6px; padding: 14px 10px 18px;
         text-align: center; color: white; box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+        animation: fadeInUp 0.5s ease both;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
-    .podium-block.gold { background: linear-gradient(180deg,#fde68a,#f59e0b); height: 200px; order: 2; }
+    .podium-block:hover { transform: translateY(-6px) scale(1.03); }
+    .podium-block.gold {
+        background: linear-gradient(180deg,#fde68a,#f59e0b); height: 200px; order: 2;
+        animation: fadeInUp 0.5s ease both, goldGlow 2.4s ease-in-out infinite;
+    }
     .podium-block.silver { background: linear-gradient(180deg,#e5e7eb,#94a3b8); height: 160px; order: 1; }
     .podium-block.bronze { background: linear-gradient(180deg,#fed7aa,#fb923c); height: 140px; order: 3; }
     .podium-medal { font-size: 2rem; line-height: 1; }
@@ -378,8 +394,9 @@ st.markdown("""
         background: #ffffff; border: 1px solid #eef0f3; border-radius: 16px;
         padding: 14px 20px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
         transition: transform 0.15s ease, box-shadow 0.15s ease;
+        animation: fadeInUp 0.4s ease both;
     }
-    .rank-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16, 24, 40, 0.08); }
+    .rank-card:hover { transform: translateY(-2px) scale(1.005); box-shadow: 0 6px 16px rgba(16, 24, 40, 0.08); }
     .rank-card-top { display: flex; align-items: center; gap: 16px; }
 
     .rank-badge { width: 34px; min-width: 34px; text-align: center; font-size: 1.1rem; font-weight: 800; color: #9ca3af; }
@@ -398,7 +415,10 @@ st.markdown("""
     .score-pill.zero { background: #f1f5f9; color: #475569; }
 
     .progress-track { width: 100%; height: 7px; background: #f1f5f9; border-radius: 999px; margin-top: 10px; overflow: hidden; }
-    .progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg,#6366f1,#8b5cf6); }
+    .progress-fill {
+        height: 100%; border-radius: 999px; background: linear-gradient(90deg,#6366f1,#8b5cf6);
+        transition: width 0.8s ease;
+    }
 
     .badge-row { margin-top: 8px; }
     .badge-chip {
@@ -411,7 +431,16 @@ st.markdown("""
     div[data-testid="stExpander"] { border: none; border-radius: 14px; overflow: hidden; }
     button[kind="secondary"], button[kind="primary"] { border-radius: 10px !important; }
 
-    button[data-baseweb="tab"] { font-weight: 700; font-size: 1.02rem; }
+    button[data-baseweb="tab"] {
+        font-weight: 700; font-size: 1.02rem; border-radius: 999px !important;
+        padding: 4px 20px !important; transition: background 0.2s ease, color 0.2s ease;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
+        color: #ffffff !important;
+    }
+    div[data-testid="stTabs"] [data-baseweb="tab-highlight"] { display: none; }
+    div[data-testid="stTabs"] [data-baseweb="tab-border"] { display: none; }
 
     /* Tắt kiểu "dính cố định" (sticky) mặc định của thanh tab — kiểu này hay bị
        chồng chữ / lỗi hiển thị khi cuộn trang trên một số trình duyệt. */
@@ -637,8 +666,17 @@ with tab_home:
                     st.rerun()
         st.write("")
 
-    # --- Tìm kiếm + Bảng xếp hạng ---
-    tu_khoa = st.text_input("🔍 Tìm thành viên:", placeholder="Nhập tên cần tìm...")
+    # --- Tìm kiếm + Sắp xếp + Bảng xếp hạng ---
+    col_tim, col_sapxep = st.columns([2, 1.4])
+    with col_tim:
+        tu_khoa = st.text_input("🔍 Tìm thành viên:", placeholder="Nhập tên cần tìm...")
+    with col_sapxep:
+        sap_xep = st.radio(
+            "Sắp xếp:",
+            ["🏆 Theo điểm", "🔤 Theo tên (A-Z)"],
+            horizontal=True,
+            key="sap_xep_mode",
+        )
 
     st.subheader("📋 Bảng xếp hạng")
 
@@ -668,10 +706,16 @@ with tab_home:
             for ten_h, grp in all_hist_df.groupby("Thành viên", sort=False):
                 hist_by_member[ten_h] = grp.drop(columns=["Thành viên"])
 
-        if tu_khoa.strip():
-            # --- Có tìm kiếm: bỏ podium, hiện danh sách khớp kèm đúng thứ hạng gốc ---
+        dang_az = sap_xep.startswith("🔤")
+
+        if tu_khoa.strip() or dang_az:
+            # --- Có tìm kiếm HOẶC chọn sắp xếp A-Z: bỏ podium, hiện danh sách phẳng
+            # (thứ hạng 🥇🥈🥉/số hiển thị vẫn giữ đúng theo điểm gốc, chỉ thay đổi thứ tự hiện) ---
             loc = tu_khoa.strip().lower()
-            ranked = [(idx, row) for idx, row in ranked if loc in str(row["name"]).lower()]
+            if loc:
+                ranked = [(idx, row) for idx, row in ranked if loc in str(row["name"]).lower()]
+            if dang_az:
+                ranked = sorted(ranked, key=lambda item: str(item[1]["name"]).lower())
             if not ranked:
                 st.info("Không tìm thấy thành viên nào khớp.")
 
