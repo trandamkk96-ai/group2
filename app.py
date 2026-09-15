@@ -1,3 +1,4 @@
+import html
 import io
 from datetime import date, timedelta
 
@@ -28,7 +29,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("15/09/2026", "Tách Góp ý thành tab riêng — giờ có 3 tab: Trang chủ / Cập nhật / Góp ý, mỗi tab có banner màu riêng. Thêm Chế độ tối (nút 🌙 ở thanh bên), sắp xếp theo tên A-Z, giao diện sinh động hơn (hiệu ứng xuất hiện, bục vàng phát sáng, tab bo tròn dạng viên thuốc). Mã QR mở nhanh, Nhật ký hoạt động chung."),
+    ("15/09/2026", "Thêm tab Tin tức (chỉ Admin đăng/xoá được, ai cũng xem được) — tin mới nhất còn hiện ngay trên Trang chủ. Giờ có 4 tab: Trang chủ / Tin tức / Cập nhật / Góp ý, mỗi tab có banner màu riêng. Thêm Chế độ tối (nút 🌙 ở thanh bên), sắp xếp theo tên A-Z, giao diện sinh động hơn. Mã QR mở nhanh, Nhật ký hoạt động chung."),
     ("14/09/2026", "Thêm bộ lọc lịch sử theo ngày, biểu đồ xu hướng điểm, huy hiệu thành tích, xuất file PDF."),
     ("12/09/2026", "Thêm hộp góp ý (chỉ Admin đọc), avatar, bục podium top 3, tìm kiếm thành viên, hoàn tác."),
 ]
@@ -59,6 +60,13 @@ def init_db():
             CREATE TABLE IF NOT EXISTS feedback (
                 id SERIAL PRIMARY KEY,
                 nguoi_gui TEXT,
+                noi_dung TEXT NOT NULL,
+                ngay TIMESTAMP NOT NULL DEFAULT now()
+            )
+        """))
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS news (
+                id SERIAL PRIMARY KEY,
                 noi_dung TEXT NOT NULL,
                 ngay TIMESTAMP NOT NULL DEFAULT now()
             )
@@ -335,6 +343,29 @@ def delete_feedback(feedback_id):
         s.commit()
 
 
+def add_news(noi_dung):
+    """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi)."""
+    with conn.session as s:
+        s.execute(text("INSERT INTO news (noi_dung) VALUES (:nd)"), {"nd": noi_dung})
+        s.commit()
+
+
+def load_news():
+    """Tin tức công khai — ai cũng xem được, chỉ Admin mới đăng/xoá được."""
+    return conn.query('SELECT id, noi_dung, ngay FROM news ORDER BY ngay DESC', ttl=0)
+
+
+def load_latest_news():
+    """Lấy đúng 1 tin mới nhất — để hiện lên Trang chủ (nếu chưa có tin nào thì trả về rỗng)."""
+    return conn.query('SELECT id, noi_dung, ngay FROM news ORDER BY ngay DESC LIMIT 1', ttl=0)
+
+
+def delete_news(news_id):
+    with conn.session as s:
+        s.execute(text("DELETE FROM news WHERE id = :id"), {"id": news_id})
+        s.commit()
+
+
 # ---------------------------------------------------------------
 # CHẾ ĐỘ TỐI — đặt sớm (trước CSS) để tính màu cho toàn bộ giao diện bên dưới.
 # ---------------------------------------------------------------
@@ -365,10 +396,14 @@ st.markdown(f"""
     .hero-title {{ font-size: 1.9rem; font-weight: 800; margin: 0; }}
     .hero-subtitle {{ opacity: 0.9; font-size: 0.95rem; margin-top: 4px; }}
 
-    /* --- Banner nhỏ đầu mỗi tab (Cập nhật / Góp ý) --- */
+    /* --- Banner nhỏ đầu mỗi tab (Tin tức / Cập nhật / Góp ý) --- */
     .tab-hero {{
         border-radius: 16px; padding: 18px 24px; margin-bottom: 20px; color: white;
         animation: fadeInUp 0.4s ease both;
+    }}
+    .tab-hero.news {{
+        background: linear-gradient(135deg, #ef4444 0%, #ec4899 100%);
+        box-shadow: 0 8px 20px rgba(239, 68, 68, 0.25);
     }}
     .tab-hero.update {{
         background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
@@ -380,6 +415,16 @@ st.markdown(f"""
     }}
     .tab-hero-title {{ font-size: 1.3rem; font-weight: 800; margin: 0; }}
     .tab-hero-subtitle {{ opacity: 0.92; font-size: 0.88rem; margin-top: 4px; }}
+
+    /* --- Banner "Tin mới nhất" hiện gọn trên Trang chủ (khi Admin có đăng tin) --- */
+    .home-news-banner {{
+        background: linear-gradient(135deg, #ef4444 0%, #ec4899 100%);
+        border-radius: 14px; padding: 14px 20px; margin-bottom: 20px; color: white;
+        box-shadow: 0 6px 16px rgba(239, 68, 68, 0.25);
+        animation: fadeInUp 0.4s ease both;
+    }}
+    .home-news-label {{ font-size: 0.72rem; font-weight: 800; text-transform: uppercase; opacity: 0.85; letter-spacing: 0.03em; }}
+    .home-news-text {{ font-size: 1rem; font-weight: 600; margin-top: 4px; line-height: 1.5; white-space: pre-wrap; }}
 
     /* --- Danh sách "Cập nhật mới nhất" dạng timeline --- */
     .update-item {{
@@ -393,6 +438,15 @@ st.markdown(f"""
         background: #fed7aa; color: #9a3412; font-size: 0.65rem; vertical-align: middle;
         margin-left: 6px;
     }}
+
+    /* --- Từng tin trong tab "Tin tức" --- */
+    .news-item {{
+        background: {C_CARD}; border: 1px solid {C_BORDER}; border-left: 4px solid #ef4444;
+        border-radius: 12px; padding: 12px 18px; margin-bottom: 12px;
+        animation: fadeInUp 0.4s ease both;
+    }}
+    .news-item-date {{ font-weight: 700; color: {C_MUTED}; font-size: 0.78rem; }}
+    .news-item-text {{ color: {C_TEXT}; font-size: 0.95rem; margin-top: 3px; line-height: 1.5; white-space: pre-wrap; }}
 
     div[data-testid="stMetric"] {{
         background: {C_CARD}; border: 1px solid {C_BORDER}; border-radius: 14px;
@@ -617,9 +671,11 @@ else:
 
 
 # ---------------------------------------------------------------
-# 3 TAB CHÍNH: Trang chủ / Cập nhật / Góp ý
+# 4 TAB CHÍNH: Trang chủ / Tin tức / Cập nhật / Góp ý
 # ---------------------------------------------------------------
-tab_home, tab_update, tab_feedback = st.tabs(["🏠 Trang chủ", "🆕 Cập nhật", "💬 Góp ý"])
+tab_home, tab_news, tab_update, tab_feedback = st.tabs(
+    ["🏠 Trang chủ", "📰 Tin tức", "🆕 Cập nhật", "💬 Góp ý"]
+)
 
 # =================================================================
 # TAB 1 — TRANG CHỦ (toàn bộ nội dung cũ: điểm, xếp hạng, form, v.v.)
@@ -632,6 +688,20 @@ with tab_home:
         '</div>',
         unsafe_allow_html=True,
     )
+
+    # --- Tin mới nhất (nếu Admin có đăng ở tab "📰 Tin tức") ---
+    # Không đăng gì thì không hiện gì ở đây cả — trang chủ vẫn như bình thường.
+    tin_moi_nhat = load_latest_news()
+    if not tin_moi_nhat.empty:
+        tin = tin_moi_nhat.iloc[0]
+        thoi_gian_tin = tin["ngay"].strftime("%d/%m/%Y %H:%M") if pd.notna(tin["ngay"]) else ""
+        st.markdown(
+            '<div class="home-news-banner">'
+            f'<div class="home-news-label">📰 Tin mới nhất — {thoi_gian_tin}</div>'
+            f'<div class="home-news-text">{html.escape(tin["noi_dung"])}</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
     members_df = load_members()
 
@@ -903,7 +973,54 @@ with tab_home:
 
 
 # =================================================================
-# TAB 2 — CẬP NHẬT (nhật ký các tính năng mới của web)
+# TAB 2 — TIN TỨC (chỉ Admin đăng/xoá được — ai cũng xem được)
+# =================================================================
+with tab_news:
+    st.markdown(
+        '<div class="tab-hero news">'
+        '<div class="tab-hero-title">📰 Tin tức</div>'
+        '<div class="tab-hero-subtitle">Thông báo từ Admin cho cả nhóm</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    if is_admin:
+        with st.form("form_dang_tin", clear_on_submit=True):
+            noi_dung_tin = st.text_area("Viết tin mới:", placeholder="Nhập nội dung thông báo...")
+            da_dang_tin = st.form_submit_button("📰 Đăng tin", use_container_width=True)
+            if da_dang_tin:
+                if noi_dung_tin.strip():
+                    add_news(noi_dung_tin.strip())
+                    st.success("Đã đăng tin!")
+                    st.rerun()
+                else:
+                    st.error("Vui lòng nhập nội dung tin.")
+        st.write("")
+
+    news_df = load_news()
+    if news_df.empty:
+        st.caption("Chưa có tin tức nào.")
+    else:
+        for _, tin in news_df.iterrows():
+            thoi_gian = tin["ngay"].strftime("%d/%m/%Y %H:%M") if pd.notna(tin["ngay"]) else ""
+            card_html = (
+                f'<div class="news-item"><div class="news-item-date">{thoi_gian}</div>'
+                f'<div class="news-item-text">{html.escape(tin["noi_dung"])}</div></div>'
+            )
+            if is_admin:
+                col_tin, col_xoa = st.columns([6, 1])
+                with col_tin:
+                    st.markdown(card_html, unsafe_allow_html=True)
+                with col_xoa:
+                    if st.button("🗑️", key=f"del_news_{tin['id']}", help="Xoá tin này"):
+                        delete_news(int(tin["id"]))
+                        st.rerun()
+            else:
+                st.markdown(card_html, unsafe_allow_html=True)
+
+
+# =================================================================
+# TAB 3 — CẬP NHẬT (nhật ký các tính năng mới của web)
 # =================================================================
 with tab_update:
     st.markdown(
@@ -923,7 +1040,7 @@ with tab_update:
 
 
 # =================================================================
-# TAB 3 — GÓP Ý (công khai gửi, chỉ Admin đọc — ở sidebar)
+# TAB 4 — GÓP Ý (công khai gửi, chỉ Admin đọc — ở sidebar)
 # =================================================================
 with tab_feedback:
     st.markdown(
