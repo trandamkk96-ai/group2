@@ -31,7 +31,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("15/09/2026", "📅 Thêm banner \"Hôm nay học gì\" ngay trên Trang chủ — tự lấy đúng lịch của hôm đó từ tab Thời khóa biểu theo giờ Hà Nội, khỏi cần bấm qua tab riêng để xem."),
+    ("15/09/2026", "📅 Banner \"Hôm nay học gì\" trên Trang chủ giờ thông minh hơn: sau 11h45 sáng (buổi học đã xong) tự động chuyển sang hiện lịch của NGÀY MAI luôn, để chuẩn bị trước cho hôm sau thay vì cứ hiện lịch hôm nay đã học xong."),
     ("15/09/2026", "📅 Thêm tab Thời khóa biểu (kế bên Trang chủ) — ai cũng xem được, Admin sửa thẳng trên web trong 10 giây (không cần vào GitHub nữa): mở tab này → bấm \"Sửa thời khóa biểu\" → gõ lại → Lưu là xong ngay."),
     ("15/09/2026", "⚡ Giảm tải cho điện thoại yếu: bớt bớt số sao/sao băng chạy hoạt ảnh ở Chế độ tối (trang mượt hơn hẳn), điện thoại màn nhỏ tự động bớt thêm một nửa sao băng, máy nào bật \"Giảm chuyển động\" thì web tự tắt hẳn hoạt ảnh trang trí."),
     ("15/09/2026", "🕒 Tự động đổi giao diện theo giờ Hà Nội — giờ BẬT SẴN mặc định, ai mở trang cũng tự đúng giờ luôn (sau 18h tối tự Chế độ tối, sau 6h sáng tự Chế độ sáng), không cần bấm gì; vẫn có thể tắt tự động để tự chọn thủ công. Chế độ sáng giờ cũng có \"bầu trời\" riêng cho hợp với Chế độ tối: nền trời xanh nhạt, mặt trời phát sáng, mây trôi nhẹ nhàng."),
@@ -457,9 +457,21 @@ def _dang_la_ban_dem_o_ha_noi() -> bool:
 # để khớp với nhãn "Thứ x" trong Thời khóa biểu.
 _TEN_THU_VN = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "CN"]
 
+GIO_CHUYEN_SANG_NGAY_MAI = (11, 45)  # (giờ, phút) — qua mốc này là buổi học sáng đã xong
 
-def _thu_hom_nay_ha_noi() -> str:
-    return _TEN_THU_VN[datetime.now(GIO_HA_NOI).weekday()]
+
+def _ngay_hien_thi_tkb_ha_noi():
+    """Trước 11h45: hiện lịch của HÔM NAY. Từ 11h45 trở đi (buổi sáng đã học xong, cần chuẩn bị
+    cho hôm sau): tự chuyển sang hiện lịch của NGÀY MAI. Trả về (nhãn, "Thứ x"/"CN" của ngày đó)."""
+    bay_gio = datetime.now(GIO_HA_NOI)
+    gio_ct, phut_ct = GIO_CHUYEN_SANG_NGAY_MAI
+    if (bay_gio.hour, bay_gio.minute) >= (gio_ct, phut_ct):
+        ngay_hien_thi = bay_gio + timedelta(days=1)
+        nhan = "Ngày mai"
+    else:
+        ngay_hien_thi = bay_gio
+        nhan = "Hôm nay"
+    return nhan, _TEN_THU_VN[ngay_hien_thi.weekday()]
 
 
 auto_theme = st.sidebar.toggle(
@@ -1013,25 +1025,27 @@ with tab_home:
         unsafe_allow_html=True,
     )
 
-    # --- "Hôm nay học gì" — tự lấy từ tab Thời khóa biểu theo đúng thứ hôm nay (giờ Hà Nội) ---
-    thu_hom_nay = _thu_hom_nay_ha_noi()
+    # --- "Hôm nay / Ngày mai học gì" — tự lấy từ tab Thời khóa biểu theo giờ Hà Nội.
+    # Sau 11h45 sáng (buổi học đã xong) thì tự chuyển sang hiện lịch của NGÀY MAI luôn,
+    # để chuẩn bị trước cho hôm sau thay vì cứ hiện lịch hôm nay đã học xong rồi.
+    nhan_ngay_tkb, thu_hien_thi_tkb = _ngay_hien_thi_tkb_ha_noi()
     tkb_now_df = load_thoikhoabieu_hien_tai()
     noi_dung_tkb_now = tkb_now_df.iloc[0]["noi_dung"] if not tkb_now_df.empty else TKB_MAC_DINH
-    _, cac_ngay_hom_nay = _tach_dong_tkb(noi_dung_tkb_now)
-    mon_hoc_hom_nay = next((mon for thu, mon in cac_ngay_hom_nay if thu == thu_hom_nay), None)
+    _, cac_ngay_hien_thi_tkb = _tach_dong_tkb(noi_dung_tkb_now)
+    mon_hoc_hien_thi = next((mon for thu, mon in cac_ngay_hien_thi_tkb if thu == thu_hien_thi_tkb), None)
 
-    if mon_hoc_hom_nay:
+    if mon_hoc_hien_thi:
         st.markdown(
             '<div class="home-tkb-banner">'
-            f'<div class="home-tkb-label">📅 Hôm nay ({html.escape(thu_hom_nay)}) học:</div>'
-            f'<div class="home-tkb-text">{html.escape(mon_hoc_hom_nay)}</div>'
+            f'<div class="home-tkb-label">📅 {html.escape(nhan_ngay_tkb)} ({html.escape(thu_hien_thi_tkb)}) học:</div>'
+            f'<div class="home-tkb-text">{html.escape(mon_hoc_hien_thi)}</div>'
             '</div>',
             unsafe_allow_html=True,
         )
     else:
         st.markdown(
             '<div class="home-tkb-banner nghi">'
-            f'<div class="home-tkb-label">📅 Hôm nay ({html.escape(thu_hom_nay)})</div>'
+            f'<div class="home-tkb-label">📅 {html.escape(nhan_ngay_tkb)} ({html.escape(thu_hien_thi_tkb)})</div>'
             '<div class="home-tkb-text">🎉 Không có lịch học trong Thời khóa biểu.</div>'
             '</div>',
             unsafe_allow_html=True,
