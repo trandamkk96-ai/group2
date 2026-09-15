@@ -21,6 +21,10 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 
 st.set_page_config(page_title="Quản Lý Điểm Nhóm", page_icon="🏆", layout="wide")
 
+# Link app cố định — nếu sau này đổi sang link/tên miền khác, chỉ cần sửa đúng dòng này
+# rồi cập nhật lại app.py trên GitHub là mã QR sẽ tự cập nhật theo.
+APP_URL = "https://group2-bl2ar8lcntmbxvkfxy4n7.streamlit.app/"
+
 # --- Kết nối database ---------------------------------------------------
 conn = st.connection("supabase_db", type="sql")
 
@@ -512,25 +516,12 @@ members_df = load_members()
 # MÃ QR MỞ NHANH
 # ---------------------------------------------------------------
 with st.expander("📱 Mã QR mở nhanh (để chia sẻ cho mọi người quét)"):
-    default_url = st.secrets.get("app_url", "")
-    app_url_input = st.text_input(
-        "Dán link app của bạn vào đây (xem trên thanh địa chỉ trình duyệt):",
-        value=default_url,
-        placeholder="https://ten-app-cua-ban.streamlit.app",
+    st.image(
+        make_qr_bytes(APP_URL),
+        caption="Quét mã này bằng camera điện thoại để mở app ngay",
+        width=200,
     )
-    if app_url_input.strip():
-        st.image(
-            make_qr_bytes(app_url_input.strip()),
-            caption="Quét mã này bằng camera điện thoại để mở app ngay",
-            width=200,
-        )
-        if not default_url:
-            st.caption(
-                "Mẹo: thêm dòng app_url = \"link-cua-ban\" vào Secrets trên Streamlit Cloud "
-                "để lần sau mở trang khỏi cần dán lại link."
-            )
-    else:
-        st.caption("Dán link app vào ô trên để tạo mã QR dùng chung.")
+    st.caption(APP_URL)
 
 # ---------------------------------------------------------------
 # LỌC LỊCH SỬ THEO KHOẢNG THỜI GIAN (áp dụng cho lịch sử xem + xuất file)
