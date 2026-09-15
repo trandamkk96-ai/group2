@@ -1,3 +1,4 @@
+import html
 import io
 from datetime import date, timedelta
 
@@ -25,6 +26,14 @@ st.set_page_config(page_title="Quản Lý Điểm Nhóm", page_icon="🏆", layo
 # rồi cập nhật lại app.py trên GitHub là mã QR sẽ tự cập nhật theo.
 APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 
+# Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
+# vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
+UPDATES = [
+    ("15/09/2026", "Thêm mã QR mở nhanh, Nhật ký hoạt động chung, Cộng đồng thảo luận, 3 tab Trang chủ / Cập nhật / Cộng đồng."),
+    ("14/09/2026", "Thêm bộ lọc lịch sử theo ngày, biểu đồ xu hướng điểm, huy hiệu thành tích, xuất file PDF."),
+    ("12/09/2026", "Thêm hộp góp ý (chỉ Admin đọc), avatar, bục podium top 3, tìm kiếm thành viên, hoàn tác."),
+]
+
 # --- Kết nối database ---------------------------------------------------
 conn = st.connection("supabase_db", type="sql")
 
@@ -49,6 +58,14 @@ def init_db():
         """))
         s.execute(text("""
             CREATE TABLE IF NOT EXISTS feedback (
+                id SERIAL PRIMARY KEY,
+                nguoi_gui TEXT,
+                noi_dung TEXT NOT NULL,
+                ngay TIMESTAMP NOT NULL DEFAULT now()
+            )
+        """))
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS discussions (
                 id SERIAL PRIMARY KEY,
                 nguoi_gui TEXT,
                 noi_dung TEXT NOT NULL,
@@ -327,6 +344,30 @@ def delete_feedback(feedback_id):
         s.commit()
 
 
+def add_discussion(nguoi_gui, noi_dung):
+    with conn.session as s:
+        s.execute(
+            text("INSERT INTO discussions (nguoi_gui, noi_dung) VALUES (:ng, :nd)"),
+            {"ng": nguoi_gui, "nd": noi_dung},
+        )
+        s.commit()
+
+
+def load_discussions(limit=50):
+    """Bảng thảo luận công khai — ai cũng xem được, khác với Hộp góp ý (chỉ Admin đọc)."""
+    return conn.query(
+        'SELECT id, nguoi_gui, noi_dung, ngay FROM discussions ORDER BY ngay DESC, id DESC LIMIT :lim',
+        params={"lim": limit},
+        ttl=0,
+    )
+
+
+def delete_discussion(discussion_id):
+    with conn.session as s:
+        s.execute(text("DELETE FROM discussions WHERE id = :id"), {"id": discussion_id})
+        s.commit()
+
+
 # ---------------------------------------------------------------
 # CSS — giao diện
 # ---------------------------------------------------------------
@@ -402,6 +443,16 @@ st.markdown("""
 
     div[data-testid="stExpander"] { border: none; border-radius: 14px; overflow: hidden; }
     button[kind="secondary"], button[kind="primary"] { border-radius: 10px !important; }
+
+    .msg-card {
+        background: #ffffff; border: 1px solid #eef0f3; border-radius: 14px;
+        padding: 12px 18px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+    }
+    .msg-head { font-weight: 700; color: #111827; font-size: 0.95rem; }
+    .msg-time { font-weight: 400; color: #9ca3af; font-size: 0.78rem; margin-left: 6px; }
+    .msg-body { margin-top: 4px; color: #374151; white-space: pre-wrap; word-break: break-word; }
+
+    button[data-baseweb="tab"] { font-weight: 700; font-size: 1.02rem; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -500,245 +551,229 @@ else:
 
 
 # ---------------------------------------------------------------
-# HEADER
+# 3 TAB CHÍNH: Trang chủ / Cập nhật / Cộng đồng
 # ---------------------------------------------------------------
-st.markdown(
-    '<div class="hero">'
-    '<div class="hero-title">🏆 Quản Lý Điểm Nhóm</div>'
-    '<div class="hero-subtitle">Bảng xếp hạng điểm — cập nhật trực tiếp, mọi lúc mọi nơi</div>'
-    '</div>',
-    unsafe_allow_html=True,
-)
+tab_home, tab_update, tab_community = st.tabs(["🏠 Trang chủ", "🆕 Cập nhật", "🗨️ Cộng đồng"])
 
-members_df = load_members()
-
-# ---------------------------------------------------------------
-# MÃ QR MỞ NHANH
-# ---------------------------------------------------------------
-with st.expander("📱 Mã QR mở nhanh (để chia sẻ cho mọi người quét)"):
-    st.image(
-        make_qr_bytes(APP_URL),
-        caption="Quét mã này bằng camera điện thoại để mở app ngay",
-        width=200,
+# =================================================================
+# TAB 1 — TRANG CHỦ (toàn bộ nội dung cũ: điểm, xếp hạng, form, v.v.)
+# =================================================================
+with tab_home:
+    st.markdown(
+        '<div class="hero">'
+        '<div class="hero-title">🏆 Quản Lý Điểm Nhóm</div>'
+        '<div class="hero-subtitle">Bảng xếp hạng điểm — cập nhật trực tiếp, mọi lúc mọi nơi</div>'
+        '</div>',
+        unsafe_allow_html=True,
     )
-    st.caption(APP_URL)
 
-# ---------------------------------------------------------------
-# LỌC LỊCH SỬ THEO KHOẢNG THỜI GIAN (áp dụng cho lịch sử xem + xuất file)
-# ---------------------------------------------------------------
-with st.expander("📅 Lọc lịch sử theo khoảng thời gian"):
-    loc_theo_ngay = st.checkbox("Chỉ xem lịch sử trong khoảng ngày cụ thể")
-    if loc_theo_ngay:
-        col_d1, col_d2 = st.columns(2)
-        with col_d1:
-            start_dt = st.date_input("Từ ngày:", value=date.today() - timedelta(days=7))
-        with col_d2:
-            end_dt = st.date_input("Đến ngày:", value=date.today())
-    else:
-        start_dt, end_dt = None, None
-        st.caption("Đang hiển thị toàn bộ lịch sử (chưa lọc theo ngày).")
+    members_df = load_members()
 
-if not members_df.empty:
-    kpi1, kpi2, kpi3 = st.columns(3)
-    kpi1.metric("Số thành viên", len(members_df))
-    kpi2.metric("Điểm cao nhất", int(members_df["diem"].max()))
-    kpi3.metric("Tổng điểm", int(members_df["diem"].sum()))
+    # --- Mã QR mở nhanh ---
+    with st.expander("📱 Mã QR mở nhanh (để chia sẻ cho mọi người quét)"):
+        st.image(
+            make_qr_bytes(APP_URL),
+            caption="Quét mã này bằng camera điện thoại để mở app ngay",
+            width=200,
+        )
+        st.caption(APP_URL)
 
-    muon_xuat_file = st.checkbox(
-        "Chuẩn bị file để xuất (Excel / PDF) — chỉ tạo file khi bấm vào đây, giúp trang mở nhanh hơn",
-        key="muon_xuat_file",
-    )
-    if muon_xuat_file:
-        excel_bytes = to_excel_bytes(members_df, load_all_history(start_dt, end_dt))
-        pdf_bytes = to_pdf_bytes(members_df, load_all_history(start_dt, end_dt))
-        col_exp1, col_exp2 = st.columns(2)
-        with col_exp1:
-            st.download_button(
-                "⬇️ Xuất file Excel",
-                data=excel_bytes,
-                file_name="diem_nhom.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-            )
-        with col_exp2:
-            st.download_button(
-                "⬇️ Xuất file PDF",
-                data=pdf_bytes,
-                file_name="diem_nhom.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
-    st.write("")
-
-
-# ---------------------------------------------------------------
-# FORM CỘNG / TRỪ ĐIỂM (chỉ Admin) + Hoàn tác
-# ---------------------------------------------------------------
-if is_admin:
-    with st.expander("📝 Form Cộng / Trừ Điểm", expanded=True):
-        if members_df.empty:
-            st.warning("Chưa có thành viên nào. Hãy thêm ở thanh bên trái!")
+    # --- Lọc lịch sử theo khoảng thời gian ---
+    with st.expander("📅 Lọc lịch sử theo khoảng thời gian"):
+        loc_theo_ngay = st.checkbox("Chỉ xem lịch sử trong khoảng ngày cụ thể")
+        if loc_theo_ngay:
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                start_dt = st.date_input("Từ ngày:", value=date.today() - timedelta(days=7))
+            with col_d2:
+                end_dt = st.date_input("Đến ngày:", value=date.today())
         else:
-            col1, col2, col3, col4 = st.columns([2, 1, 3, 2])
-            with col1:
-                ten_duoc_chon = st.selectbox("Chọn thành viên:", members_df["name"].tolist())
-            with col2:
-                so_diem = st.number_input("Điểm (+/-):", value=0, step=1)
-            with col3:
-                ly_do = st.text_input("Lý do / Lỗi vi phạm:")
-            with col4:
-                nguoi_ky = st.text_input("Người ký tên:", value="Admin")
+            start_dt, end_dt = None, None
+            st.caption("Đang hiển thị toàn bộ lịch sử (chưa lọc theo ngày).")
 
-            if st.button("✅ Cập nhật điểm", use_container_width=True):
-                if not ly_do.strip():
-                    st.error("Vui lòng nhập lý do!")
-                else:
-                    update_score(ten_duoc_chon, int(so_diem), ly_do.strip(), nguoi_ky.strip())
-                    st.success(f"Đã cập nhật {so_diem:+} điểm cho {ten_duoc_chon}!")
+    if not members_df.empty:
+        kpi1, kpi2, kpi3 = st.columns(3)
+        kpi1.metric("Số thành viên", len(members_df))
+        kpi2.metric("Điểm cao nhất", int(members_df["diem"].max()))
+        kpi3.metric("Tổng điểm", int(members_df["diem"].sum()))
+
+        muon_xuat_file = st.checkbox(
+            "Chuẩn bị file để xuất (Excel / PDF) — chỉ tạo file khi bấm vào đây, giúp trang mở nhanh hơn",
+            key="muon_xuat_file",
+        )
+        if muon_xuat_file:
+            excel_bytes = to_excel_bytes(members_df, load_all_history(start_dt, end_dt))
+            pdf_bytes = to_pdf_bytes(members_df, load_all_history(start_dt, end_dt))
+            col_exp1, col_exp2 = st.columns(2)
+            with col_exp1:
+                st.download_button(
+                    "⬇️ Xuất file Excel",
+                    data=excel_bytes,
+                    file_name="diem_nhom.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                )
+            with col_exp2:
+                st.download_button(
+                    "⬇️ Xuất file PDF",
+                    data=pdf_bytes,
+                    file_name="diem_nhom.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+        st.write("")
+
+    # --- Form Cộng / Trừ điểm (chỉ Admin) + Hoàn tác ---
+    if is_admin:
+        with st.expander("📝 Form Cộng / Trừ Điểm", expanded=True):
+            if members_df.empty:
+                st.warning("Chưa có thành viên nào. Hãy thêm ở thanh bên trái!")
+            else:
+                col1, col2, col3, col4 = st.columns([2, 1, 3, 2])
+                with col1:
+                    ten_duoc_chon = st.selectbox("Chọn thành viên:", members_df["name"].tolist())
+                with col2:
+                    so_diem = st.number_input("Điểm (+/-):", value=0, step=1)
+                with col3:
+                    ly_do = st.text_input("Lý do / Lỗi vi phạm:")
+                with col4:
+                    nguoi_ky = st.text_input("Người ký tên:", value="Admin")
+
+                if st.button("✅ Cập nhật điểm", use_container_width=True):
+                    if not ly_do.strip():
+                        st.error("Vui lòng nhập lý do!")
+                    else:
+                        update_score(ten_duoc_chon, int(so_diem), ly_do.strip(), nguoi_ky.strip())
+                        st.success(f"Đã cập nhật {so_diem:+} điểm cho {ten_duoc_chon}!")
+                        st.rerun()
+
+            # --- Hoàn tác lần gần nhất ---
+            last_entry = load_last_entry()
+            if not last_entry.empty:
+                e = last_entry.iloc[0]
+                st.markdown("---")
+                st.caption(
+                    f"Thao tác gần nhất: **{e['ten']}** {int(e['so_diem']):+d} điểm — "
+                    f"{e['ly_do'] or '(không có lý do)'}"
+                )
+                if st.button("↩️ Hoàn tác thao tác này", use_container_width=True):
+                    undo_entry(int(e["id"]), e["ten"], int(e["so_diem"]))
+                    st.success("Đã hoàn tác!")
                     st.rerun()
+        st.write("")
 
-        # --- Hoàn tác lần gần nhất ---
-        last_entry = load_last_entry()
-        if not last_entry.empty:
-            e = last_entry.iloc[0]
-            st.markdown("---")
-            st.caption(
-                f"Thao tác gần nhất: **{e['ten']}** {int(e['so_diem']):+d} điểm — "
-                f"{e['ly_do'] or '(không có lý do)'}"
-            )
-            if st.button("↩️ Hoàn tác thao tác này", use_container_width=True):
-                undo_entry(int(e["id"]), e["ten"], int(e["so_diem"]))
-                st.success("Đã hoàn tác!")
-                st.rerun()
-    st.write("")
+    # --- Tìm kiếm + Bảng xếp hạng ---
+    tu_khoa = st.text_input("🔍 Tìm thành viên:", placeholder="Nhập tên cần tìm...")
 
+    st.subheader("📋 Bảng xếp hạng")
 
-# ---------------------------------------------------------------
-# TÌM KIẾM
-# ---------------------------------------------------------------
-tu_khoa = st.text_input("🔍 Tìm thành viên:", placeholder="Nhập tên cần tìm...")
+    MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
 
-st.subheader("📋 Bảng xếp hạng")
-
-MEDALS = {1: "🥇", 2: "🥈", 3: "🥉"}
-
-if members_df.empty:
-    st.info("Chưa có dữ liệu thành viên.")
-else:
-    ranked = list(members_df.reset_index(drop=True).iterrows())
-    diem_max = int(members_df["diem"].max())
-
-    # Lấy sẵn lịch sử gần đây của TẤT CẢ thành viên trong 1 lượt truy vấn duy nhất
-    # (thay vì mỗi thẻ xếp hạng tự hỏi database riêng) để trang mở nhanh hơn trên điện thoại,
-    # và tránh làm hết chỗ (pool) kết nối database khi có nhiều thành viên / nhiều người xem
-    # cùng lúc (đây là nguyên nhân gây lỗi "TimeoutError" trước đó).
-    recent_all_df = load_recent_all(limit_per_member=10)
-    recent_map = {}
-    if not recent_all_df.empty:
-        for ten_gr, grp in recent_all_df.groupby("ten", sort=False):
-            recent_map[ten_gr] = grp["so_diem"].tolist()
-
-    # Lấy sẵn TOÀN BỘ lịch sử (đã áp dụng lọc ngày nếu có) trong 1 lượt truy vấn duy nhất,
-    # rồi chia theo từng thành viên — thay vì mỗi ô "Xem lịch sử" tự hỏi database riêng.
-    all_hist_df = load_all_history(start_dt, end_dt)
-    hist_by_member = {}
-    if not all_hist_df.empty:
-        for ten_h, grp in all_hist_df.groupby("Thành viên", sort=False):
-            hist_by_member[ten_h] = grp.drop(columns=["Thành viên"])
-
-    if tu_khoa.strip():
-        # --- Có tìm kiếm: bỏ podium, hiện danh sách khớp kèm đúng thứ hạng gốc ---
-        loc = tu_khoa.strip().lower()
-        ranked = [(idx, row) for idx, row in ranked if loc in str(row["name"]).lower()]
-        if not ranked:
-            st.info("Không tìm thấy thành viên nào khớp.")
-
-        for idx, row in ranked:
-            rank = idx + 1
-            ten = row["name"]
-            diem = int(row["diem"])
-            top_class = ""
-            badge = MEDALS.get(rank, str(rank))
-            pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
-            chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
-            pct = progress_pct(diem, diem_max)
-
-            card_html = (
-                f'<div class="rank-card {top_class}">'
-                f'<div class="rank-card-top">'
-                f'<div class="rank-badge">{badge}</div>'
-                f'<div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>'
-                f'<div class="member-name">{ten}</div>'
-                f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
-                f'</div>'
-                f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
-                f'{badges_html(ten, diem, diem_max, recent_map)}'
-                f'</div>'
-            )
-            st.markdown(card_html, unsafe_allow_html=True)
-            with st.expander(f"Xem lịch sử của {ten}"):
-                hist_df = hist_by_member.get(ten, pd.DataFrame())
-                if not hist_df.empty:
-                    st.dataframe(hist_df, use_container_width=True, hide_index=True)
-                else:
-                    st.caption("Chưa có lịch sử cộng/trừ điểm.")
+    if members_df.empty:
+        st.info("Chưa có dữ liệu thành viên.")
     else:
-        # --- Không tìm kiếm: hiện bục podium top 3 + danh sách hạng 4 trở đi ---
-        top3 = ranked[:3]
-        rest = ranked[3:]
+        ranked = list(members_df.reset_index(drop=True).iterrows())
+        diem_max = int(members_df["diem"].max())
 
-        if top3:
-            blocks_html = ""
-            classes = ["gold", "silver", "bronze"]
-            for i, (idx, row) in enumerate(top3):
+        # Lấy sẵn lịch sử gần đây của TẤT CẢ thành viên trong 1 lượt truy vấn duy nhất
+        # (thay vì mỗi thẻ xếp hạng tự hỏi database riêng) để trang mở nhanh hơn trên điện thoại,
+        # và tránh làm hết chỗ (pool) kết nối database khi có nhiều thành viên / nhiều người xem
+        # cùng lúc (đây là nguyên nhân gây lỗi "TimeoutError" trước đó).
+        recent_all_df = load_recent_all(limit_per_member=10)
+        recent_map = {}
+        if not recent_all_df.empty:
+            for ten_gr, grp in recent_all_df.groupby("ten", sort=False):
+                recent_map[ten_gr] = grp["so_diem"].tolist()
+
+        # Lấy sẵn TOÀN BỘ lịch sử (đã áp dụng lọc ngày nếu có) trong 1 lượt truy vấn duy nhất,
+        # rồi chia theo từng thành viên — thay vì mỗi ô "Xem lịch sử" tự hỏi database riêng.
+        all_hist_df = load_all_history(start_dt, end_dt)
+        hist_by_member = {}
+        if not all_hist_df.empty:
+            for ten_h, grp in all_hist_df.groupby("Thành viên", sort=False):
+                hist_by_member[ten_h] = grp.drop(columns=["Thành viên"])
+
+        if tu_khoa.strip():
+            # --- Có tìm kiếm: bỏ podium, hiện danh sách khớp kèm đúng thứ hạng gốc ---
+            loc = tu_khoa.strip().lower()
+            ranked = [(idx, row) for idx, row in ranked if loc in str(row["name"]).lower()]
+            if not ranked:
+                st.info("Không tìm thấy thành viên nào khớp.")
+
+            for idx, row in ranked:
                 rank = idx + 1
                 ten = row["name"]
                 diem = int(row["diem"])
+                top_class = ""
+                badge = MEDALS.get(rank, str(rank))
+                pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
                 chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
-                blocks_html += (
-                    f'<div class="podium-block {classes[i]}">'
-                    f'<div class="podium-medal">{MEDALS.get(rank, "")}</div>'
-                    f'<div class="podium-avatar">{chu_cai_dau}</div>'
-                    f'<div class="podium-name">{ten}</div>'
-                    f'<div class="podium-score">{diem:+d} điểm</div>'
-                    f'{badges_html(ten, diem, diem_max, recent_map, "podium-badges")}'
+                pct = progress_pct(diem, diem_max)
+
+                card_html = (
+                    f'<div class="rank-card {top_class}">'
+                    f'<div class="rank-card-top">'
+                    f'<div class="rank-badge">{badge}</div>'
+                    f'<div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>'
+                    f'<div class="member-name">{ten}</div>'
+                    f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
+                    f'</div>'
+                    f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
+                    f'{badges_html(ten, diem, diem_max, recent_map)}'
                     f'</div>'
                 )
-            st.markdown(f'<div class="podium-wrap">{blocks_html}</div>', unsafe_allow_html=True)
+                st.markdown(card_html, unsafe_allow_html=True)
+                with st.expander(f"Xem lịch sử của {ten}"):
+                    hist_df = hist_by_member.get(ten, pd.DataFrame())
+                    if not hist_df.empty:
+                        st.dataframe(hist_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.caption("Chưa có lịch sử cộng/trừ điểm.")
+        else:
+            # --- Không tìm kiếm: hiện bục podium top 3 + danh sách hạng 4 trở đi ---
+            top3 = ranked[:3]
+            rest = ranked[3:]
 
-        for idx, row in rest:
-            rank = idx + 1
-            ten = row["name"]
-            diem = int(row["diem"])
-            pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
-            chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
-            pct = progress_pct(diem, diem_max)
+            if top3:
+                blocks_html = ""
+                classes = ["gold", "silver", "bronze"]
+                for i, (idx, row) in enumerate(top3):
+                    rank = idx + 1
+                    ten = row["name"]
+                    diem = int(row["diem"])
+                    chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
+                    blocks_html += (
+                        f'<div class="podium-block {classes[i]}">'
+                        f'<div class="podium-medal">{MEDALS.get(rank, "")}</div>'
+                        f'<div class="podium-avatar">{chu_cai_dau}</div>'
+                        f'<div class="podium-name">{ten}</div>'
+                        f'<div class="podium-score">{diem:+d} điểm</div>'
+                        f'{badges_html(ten, diem, diem_max, recent_map, "podium-badges")}'
+                        f'</div>'
+                    )
+                st.markdown(f'<div class="podium-wrap">{blocks_html}</div>', unsafe_allow_html=True)
 
-            card_html = (
-                f'<div class="rank-card">'
-                f'<div class="rank-card-top">'
-                f'<div class="rank-badge">{rank}</div>'
-                f'<div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>'
-                f'<div class="member-name">{ten}</div>'
-                f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
-                f'</div>'
-                f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
-                f'{badges_html(ten, diem, diem_max, recent_map)}'
-                f'</div>'
-            )
-            st.markdown(card_html, unsafe_allow_html=True)
-            with st.expander(f"Xem lịch sử của {ten}"):
-                hist_df = hist_by_member.get(ten, pd.DataFrame())
-                if not hist_df.empty:
-                    st.dataframe(hist_df, use_container_width=True, hide_index=True)
-                else:
-                    st.caption("Chưa có lịch sử cộng/trừ điểm.")
-
-        # Lịch sử của top 3 (đặt dưới cùng để bục podium không quá dài)
-        if top3:
-            st.markdown("##### Lịch sử của top 3")
-            for idx, row in top3:
+            for idx, row in rest:
+                rank = idx + 1
                 ten = row["name"]
+                diem = int(row["diem"])
+                pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
+                chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
+                pct = progress_pct(diem, diem_max)
+
+                card_html = (
+                    f'<div class="rank-card">'
+                    f'<div class="rank-card-top">'
+                    f'<div class="rank-badge">{rank}</div>'
+                    f'<div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>'
+                    f'<div class="member-name">{ten}</div>'
+                    f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
+                    f'</div>'
+                    f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
+                    f'{badges_html(ten, diem, diem_max, recent_map)}'
+                    f'</div>'
+                )
+                st.markdown(card_html, unsafe_allow_html=True)
                 with st.expander(f"Xem lịch sử của {ten}"):
                     hist_df = hist_by_member.get(ten, pd.DataFrame())
                     if not hist_df.empty:
@@ -746,53 +781,107 @@ else:
                     else:
                         st.caption("Chưa có lịch sử cộng/trừ điểm.")
 
+            # Lịch sử của top 3 (đặt dưới cùng để bục podium không quá dài)
+            if top3:
+                st.markdown("##### Lịch sử của top 3")
+                for idx, row in top3:
+                    ten = row["name"]
+                    with st.expander(f"Xem lịch sử của {ten}"):
+                        hist_df = hist_by_member.get(ten, pd.DataFrame())
+                        if not hist_df.empty:
+                            st.dataframe(hist_df, use_container_width=True, hide_index=True)
+                        else:
+                            st.caption("Chưa có lịch sử cộng/trừ điểm.")
 
-# ---------------------------------------------------------------
-# NHẬT KÝ HOẠT ĐỘNG CHUNG (cả nhóm, không cần mở từng người)
-# ---------------------------------------------------------------
-if not members_df.empty:
+    # --- Nhật ký hoạt động chung ---
+    if not members_df.empty:
+        st.markdown("---")
+        st.subheader("🗞️ Nhật ký hoạt động gần đây")
+        recent_activity_df = load_recent_activity(limit=15)
+        if recent_activity_df.empty:
+            st.caption("Chưa có hoạt động cộng/trừ điểm nào.")
+        else:
+            st.dataframe(recent_activity_df, use_container_width=True, hide_index=True)
+
+    # --- Xu hướng điểm ---
+    if not members_df.empty:
+        st.markdown("---")
+        st.subheader("📈 Xu hướng điểm")
+        hien_bieu_do = st.checkbox(
+            "Hiện biểu đồ xu hướng (chỉ tải khi bấm vào đây, giúp trang mở nhanh hơn trên điện thoại)",
+            key="hien_trend",
+        )
+        if hien_bieu_do:
+            trend_options = ["Cả nhóm"] + members_df["name"].tolist()
+            trend_pick = st.selectbox("Xem xu hướng của:", trend_options, key="trend_select")
+            trend_df = load_trend_series(None if trend_pick == "Cả nhóm" else trend_pick)
+            if trend_df.empty:
+                st.caption("Chưa có dữ liệu để vẽ biểu đồ.")
+            else:
+                st.line_chart(trend_df)
+
+    # --- Gửi góp ý (công khai gửi, chỉ Admin đọc — ở sidebar) ---
     st.markdown("---")
-    st.subheader("🗞️ Nhật ký hoạt động gần đây")
-    recent_activity_df = load_recent_activity(limit=15)
-    if recent_activity_df.empty:
-        st.caption("Chưa có hoạt động cộng/trừ điểm nào.")
+    st.subheader("💬 Gửi góp ý")
+    st.caption("Góp ý của bạn chỉ Admin đọc được, không hiển thị công khai cho người khác xem.")
+    with st.form("form_gop_y", clear_on_submit=True):
+        nguoi_gui_fb = st.text_input("Tên bạn (để trống nếu muốn ẩn danh):")
+        noi_dung_fb = st.text_area("Nội dung góp ý:")
+        da_gui = st.form_submit_button("Gửi góp ý", use_container_width=True)
+        if da_gui:
+            if noi_dung_fb.strip():
+                add_feedback(nguoi_gui_fb.strip() or "Ẩn danh", noi_dung_fb.strip())
+                st.success("Cảm ơn bạn đã góp ý!")
+            else:
+                st.error("Vui lòng nhập nội dung góp ý.")
+
+
+# =================================================================
+# TAB 2 — CẬP NHẬT (nhật ký các tính năng mới của web)
+# =================================================================
+with tab_update:
+    st.subheader("🆕 Cập nhật mới nhất trên web")
+    st.caption("Mỗi khi web có tính năng mới, thông tin sẽ được thêm vào đây.")
+    for ngay_cn, noi_dung_cn in UPDATES:
+        st.markdown(f"**{ngay_cn}** — {noi_dung_cn}")
+        st.markdown("---")
+
+
+# =================================================================
+# TAB 3 — CỘNG ĐỒNG (thảo luận công khai, ai cũng xem/đăng được)
+# =================================================================
+with tab_community:
+    st.subheader("🗨️ Cộng đồng thảo luận")
+    st.caption("Khu vực công khai — ai cũng xem được và đăng được.")
+
+    with st.form("form_thao_luan", clear_on_submit=True):
+        ten_tl = st.text_input("Tên bạn:", key="ten_thao_luan")
+        noi_dung_tl = st.text_area("Bạn muốn chia sẻ / thảo luận gì?", key="noi_dung_thao_luan")
+        gui_tl = st.form_submit_button("Đăng", use_container_width=True)
+        if gui_tl:
+            if noi_dung_tl.strip():
+                add_discussion(ten_tl.strip() or "Ẩn danh", noi_dung_tl.strip())
+                st.success("Đã đăng!")
+                st.rerun()
+            else:
+                st.error("Vui lòng nhập nội dung.")
+
+    discussions_df = load_discussions(limit=50)
+    if discussions_df.empty:
+        st.caption("Chưa có thảo luận nào — hãy là người đầu tiên!")
     else:
-        st.dataframe(recent_activity_df, use_container_width=True, hide_index=True)
-
-
-# ---------------------------------------------------------------
-# XU HƯỚNG ĐIỂM
-# ---------------------------------------------------------------
-if not members_df.empty:
-    st.markdown("---")
-    st.subheader("📈 Xu hướng điểm")
-    hien_bieu_do = st.checkbox(
-        "Hiện biểu đồ xu hướng (chỉ tải khi bấm vào đây, giúp trang mở nhanh hơn trên điện thoại)",
-        key="hien_trend",
-    )
-    if hien_bieu_do:
-        trend_options = ["Cả nhóm"] + members_df["name"].tolist()
-        trend_pick = st.selectbox("Xem xu hướng của:", trend_options, key="trend_select")
-        trend_df = load_trend_series(None if trend_pick == "Cả nhóm" else trend_pick)
-        if trend_df.empty:
-            st.caption("Chưa có dữ liệu để vẽ biểu đồ.")
-        else:
-            st.line_chart(trend_df)
-
-
-# ---------------------------------------------------------------
-# GÓP Ý (ai cũng gửi được — chỉ Admin mới đọc được, ở sidebar)
-# ---------------------------------------------------------------
-st.markdown("---")
-st.subheader("💬 Gửi góp ý")
-st.caption("Góp ý của bạn chỉ Admin đọc được, không hiển thị công khai cho người khác xem.")
-with st.form("form_gop_y", clear_on_submit=True):
-    nguoi_gui_fb = st.text_input("Tên bạn (để trống nếu muốn ẩn danh):")
-    noi_dung_fb = st.text_area("Nội dung góp ý:")
-    da_gui = st.form_submit_button("Gửi góp ý", use_container_width=True)
-    if da_gui:
-        if noi_dung_fb.strip():
-            add_feedback(nguoi_gui_fb.strip() or "Ẩn danh", noi_dung_fb.strip())
-            st.success("Cảm ơn bạn đã góp ý!")
-        else:
-            st.error("Vui lòng nhập nội dung góp ý.")
+        for _, d in discussions_df.iterrows():
+            thoi_gian_tl = d["ngay"].strftime("%d/%m %H:%M") if pd.notna(d["ngay"]) else ""
+            nguoi_tl = html.escape(d["nguoi_gui"] or "Ẩn danh")
+            noi_dung_hien = html.escape(d["noi_dung"])
+            msg_html = (
+                f'<div class="msg-card">'
+                f'<div class="msg-head">{nguoi_tl}<span class="msg-time">— {thoi_gian_tl}</span></div>'
+                f'<div class="msg-body">{noi_dung_hien}</div>'
+                f'</div>'
+            )
+            st.markdown(msg_html, unsafe_allow_html=True)
+            if is_admin:
+                if st.button("🗑️ Xoá bài này", key=f"del_disc_{d['id']}"):
+                    delete_discussion(int(d["id"]))
+                    st.rerun()
