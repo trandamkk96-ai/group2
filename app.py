@@ -420,14 +420,6 @@ st.markdown("""
         position: static !important; top: auto !important;
         background: #f8fafc; z-index: auto !important;
     }
-
-    /* Thanh công cụ trên cùng của Streamlit (chỗ có nút ☰) mặc định trong suốt,
-       nên khi cuộn trang, chữ của trang bị "lộ" xuyên qua gây cảm giác chồng chữ.
-       Tô nền đặc cho thanh này để che hẳn phần nội dung cuộn qua bên dưới. */
-    header[data-testid="stHeader"] {
-        background: #f8fafc !important;
-        box-shadow: 0 1px 0 rgba(16, 24, 40, 0.06);
-    }
 </style>
 """, unsafe_allow_html=True)
 
