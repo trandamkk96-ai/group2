@@ -412,6 +412,14 @@ st.markdown("""
     button[kind="secondary"], button[kind="primary"] { border-radius: 10px !important; }
 
     button[data-baseweb="tab"] { font-weight: 700; font-size: 1.02rem; }
+
+    /* Tắt kiểu "dính cố định" (sticky) mặc định của thanh tab — kiểu này hay bị
+       chồng chữ / lỗi hiển thị khi cuộn trang trên một số trình duyệt. */
+    div[data-testid="stTabs"] { position: static !important; }
+    div[data-testid="stTabs"] > div:first-child {
+        position: static !important; top: auto !important;
+        background: #f8fafc; z-index: auto !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
