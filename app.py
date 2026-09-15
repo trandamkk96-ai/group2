@@ -28,7 +28,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("15/09/2026", "Thêm sắp xếp theo tên A-Z, giao diện sinh động hơn (hiệu ứng xuất hiện, bục vàng phát sáng, tab bo tròn). Mã QR mở nhanh, Nhật ký hoạt động chung, 2 tab Trang chủ / Cập nhật."),
+    ("15/09/2026", "Thêm Chế độ tối (nút 🌙 ở thanh bên), sắp xếp theo tên A-Z, giao diện sinh động hơn (hiệu ứng xuất hiện, bục vàng phát sáng, tab bo tròn dạng viên thuốc). Mã QR mở nhanh, Nhật ký hoạt động chung, 2 tab Trang chủ / Cập nhật."),
     ("14/09/2026", "Thêm bộ lọc lịch sử theo ngày, biểu đồ xu hướng điểm, huy hiệu thành tích, xuất file PDF."),
     ("12/09/2026", "Thêm hộp góp ý (chỉ Admin đọc), avatar, bục podium top 3, tìm kiếm thành viên, hoàn tác."),
 ]
@@ -336,127 +336,158 @@ def delete_feedback(feedback_id):
 
 
 # ---------------------------------------------------------------
+# CHẾ ĐỘ TỐI — đặt sớm (trước CSS) để tính màu cho toàn bộ giao diện bên dưới.
+# ---------------------------------------------------------------
+dark_mode = st.sidebar.toggle("🌙 Chế độ tối", key="dark_mode")
+
+if dark_mode:
+    C_BG, C_CARD, C_BORDER, C_TEXT, C_MUTED, C_TRACK, C_SIDEBAR = (
+        "#0f172a", "#1e293b", "#334155", "#e2e8f0", "#94a3b8", "#334155", "#111827",
+    )
+else:
+    C_BG, C_CARD, C_BORDER, C_TEXT, C_MUTED, C_TRACK, C_SIDEBAR = (
+        "#f8fafc", "#ffffff", "#eef0f3", "#111827", "#9ca3af", "#f1f5f9", "#ffffff",
+    )
+
+# ---------------------------------------------------------------
 # CSS — giao diện
 # ---------------------------------------------------------------
-st.markdown("""
+st.markdown(f"""
 <style>
-    .block-container { padding-top: 5rem; max-width: 960px; }
+    .stApp {{ background-color: {C_BG}; }}
+    .block-container {{ padding-top: 5rem; max-width: 960px; }}
 
-    .hero {
+    .hero {{
         background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
         border-radius: 20px; padding: 28px 32px; margin-bottom: 24px; color: white;
         box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25);
-    }
-    .hero-title { font-size: 1.9rem; font-weight: 800; margin: 0; }
-    .hero-subtitle { opacity: 0.9; font-size: 0.95rem; margin-top: 4px; }
+    }}
+    .hero-title {{ font-size: 1.9rem; font-weight: 800; margin: 0; }}
+    .hero-subtitle {{ opacity: 0.9; font-size: 0.95rem; margin-top: 4px; }}
 
-    div[data-testid="stMetric"] {
-        background: #ffffff; border: 1px solid #eef0f3; border-radius: 14px;
+    div[data-testid="stMetric"] {{
+        background: {C_CARD}; border: 1px solid {C_BORDER}; border-radius: 14px;
         padding: 12px 16px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-    }
+    }}
+    div[data-testid="stMetricLabel"], div[data-testid="stMetricValue"] {{ color: {C_TEXT}; }}
 
     /* --- Hiệu ứng xuất hiện nhẹ nhàng cho các thẻ --- */
-    @keyframes fadeInUp {
-        from { opacity: 0; transform: translateY(14px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes goldGlow {
-        0%, 100% { box-shadow: 0 6px 16px rgba(245, 158, 11, 0.35); }
-        50% { box-shadow: 0 10px 30px rgba(245, 158, 11, 0.65); }
-    }
+    @keyframes fadeInUp {{
+        from {{ opacity: 0; transform: translateY(14px); }}
+        to {{ opacity: 1; transform: translateY(0); }}
+    }}
+    @keyframes goldGlow {{
+        0%, 100% {{ box-shadow: 0 6px 16px rgba(245, 158, 11, 0.35); }}
+        50% {{ box-shadow: 0 10px 30px rgba(245, 158, 11, 0.65); }}
+    }}
 
     /* --- Podium top 3 --- */
-    .podium-wrap { display: flex; align-items: flex-end; justify-content: center; gap: 14px; margin: 8px 0 26px; }
-    .podium-block {
+    .podium-wrap {{ display: flex; align-items: flex-end; justify-content: center; gap: 14px; margin: 8px 0 26px; }}
+    .podium-block {{
         flex: 1; max-width: 220px; border-radius: 16px 16px 6px 6px; padding: 14px 10px 18px;
         text-align: center; color: white; box-shadow: 0 6px 16px rgba(0,0,0,0.12);
         animation: fadeInUp 0.5s ease both;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    .podium-block:hover { transform: translateY(-6px) scale(1.03); }
-    .podium-block.gold {
+    }}
+    .podium-block:hover {{ transform: translateY(-6px) scale(1.03); }}
+    .podium-block.gold {{
         background: linear-gradient(180deg,#fde68a,#f59e0b); height: 200px; order: 2;
         animation: fadeInUp 0.5s ease both, goldGlow 2.4s ease-in-out infinite;
-    }
-    .podium-block.silver { background: linear-gradient(180deg,#e5e7eb,#94a3b8); height: 160px; order: 1; }
-    .podium-block.bronze { background: linear-gradient(180deg,#fed7aa,#fb923c); height: 140px; order: 3; }
-    .podium-medal { font-size: 2rem; line-height: 1; }
-    .podium-avatar {
+    }}
+    .podium-block.silver {{ background: linear-gradient(180deg,#e5e7eb,#94a3b8); height: 160px; order: 1; }}
+    .podium-block.bronze {{ background: linear-gradient(180deg,#fed7aa,#fb923c); height: 140px; order: 3; }}
+    .podium-medal {{ font-size: 2rem; line-height: 1; }}
+    .podium-avatar {{
         width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,0.3);
         display: flex; align-items: center; justify-content: center; font-weight: 800;
         font-size: 1.2rem; margin: 6px auto; border: 2px solid rgba(255,255,255,0.7);
-    }
-    .podium-name { font-weight: 800; font-size: 1rem; margin-top: 2px; word-break: break-word; }
-    .podium-score { font-weight: 800; font-size: 1.05rem; margin-top: 4px; }
+    }}
+    .podium-name {{ font-weight: 800; font-size: 1rem; margin-top: 2px; word-break: break-word; }}
+    .podium-score {{ font-weight: 800; font-size: 1.05rem; margin-top: 4px; }}
 
     /* --- Thẻ xếp hạng (hạng 4 trở đi, hoặc khi tìm kiếm) --- */
-    .rank-card {
-        background: #ffffff; border: 1px solid #eef0f3; border-radius: 16px;
+    .rank-card {{
+        background: {C_CARD}; border: 1px solid {C_BORDER}; border-radius: 16px;
         padding: 14px 20px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
         transition: transform 0.15s ease, box-shadow 0.15s ease;
         animation: fadeInUp 0.4s ease both;
-    }
-    .rank-card:hover { transform: translateY(-2px) scale(1.005); box-shadow: 0 6px 16px rgba(16, 24, 40, 0.08); }
-    .rank-card-top { display: flex; align-items: center; gap: 16px; }
+    }}
+    .rank-card:hover {{ transform: translateY(-2px) scale(1.005); box-shadow: 0 6px 16px rgba(16, 24, 40, 0.08); }}
+    .rank-card-top {{ display: flex; align-items: center; gap: 16px; }}
 
-    .rank-badge { width: 34px; min-width: 34px; text-align: center; font-size: 1.1rem; font-weight: 800; color: #9ca3af; }
+    .rank-badge {{ width: 34px; min-width: 34px; text-align: center; font-size: 1.1rem; font-weight: 800; color: {C_MUTED}; }}
 
-    .avatar {
+    .avatar {{
         width: 42px; height: 42px; min-width: 42px; border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
         font-weight: 800; font-size: 1rem; color: white;
-    }
+    }}
 
-    .member-name { flex: 1; font-size: 1.05rem; font-weight: 600; color: #111827; }
+    .member-name {{ flex: 1; font-size: 1.05rem; font-weight: 600; color: {C_TEXT}; }}
 
-    .score-pill { padding: 6px 16px; border-radius: 999px; font-weight: 800; font-size: 0.95rem; white-space: nowrap; }
-    .score-pill.positive { background: #dcfce7; color: #15803d; }
-    .score-pill.negative { background: #fee2e2; color: #b91c1c; }
-    .score-pill.zero { background: #f1f5f9; color: #475569; }
+    .score-pill {{ padding: 6px 16px; border-radius: 999px; font-weight: 800; font-size: 0.95rem; white-space: nowrap; }}
+    .score-pill.positive {{ background: #dcfce7; color: #15803d; }}
+    .score-pill.negative {{ background: #fee2e2; color: #b91c1c; }}
+    .score-pill.zero {{ background: #f1f5f9; color: #475569; }}
 
-    .progress-track { width: 100%; height: 7px; background: #f1f5f9; border-radius: 999px; margin-top: 10px; overflow: hidden; }
-    .progress-fill {
+    .progress-track {{ width: 100%; height: 7px; background: {C_TRACK}; border-radius: 999px; margin-top: 10px; overflow: hidden; }}
+    .progress-fill {{
         height: 100%; border-radius: 999px; background: linear-gradient(90deg,#6366f1,#8b5cf6);
         transition: width 0.8s ease;
-    }
+    }}
 
-    .badge-row { margin-top: 8px; }
-    .badge-chip {
+    .badge-row {{ margin-top: 8px; }}
+    .badge-chip {{
         display: inline-block; background: #eef2ff; color: #4338ca; border-radius: 999px;
         padding: 3px 10px; font-size: 0.72rem; font-weight: 700; margin: 3px 4px 0 0;
-    }
-    .podium-badges { margin-top: 6px; }
-    .podium-badges .badge-chip { background: rgba(255,255,255,0.28); color: #ffffff; }
+    }}
+    .podium-badges {{ margin-top: 6px; }}
+    .podium-badges .badge-chip {{ background: rgba(255,255,255,0.28); color: #ffffff; }}
 
-    div[data-testid="stExpander"] { border: none; border-radius: 14px; overflow: hidden; }
-    button[kind="secondary"], button[kind="primary"] { border-radius: 10px !important; }
+    div[data-testid="stExpander"] {{
+        border: 1px solid {C_BORDER}; border-radius: 14px; overflow: hidden; background: {C_CARD};
+    }}
+    div[data-testid="stExpander"] summary {{ background-color: {C_CARD} !important; color: {C_TEXT} !important; }}
+    button[kind="secondary"], button[kind="primary"], [data-testid^="stBaseButton"] {{ border-radius: 10px !important; }}
+    .stButton button, .stDownloadButton button, [data-testid="stFormSubmitButton"] button {{
+        background-color: {C_CARD}; color: {C_TEXT}; border: 1px solid {C_BORDER};
+    }}
 
-    button[data-baseweb="tab"] {
+    /* --- Tab "Trang chủ" / "Cập nhật" dạng viên thuốc (pill) --- */
+    [data-testid="stTab"] {{
         font-weight: 700; font-size: 1.02rem; border-radius: 999px !important;
-        padding: 4px 20px !important; transition: background 0.2s ease, color 0.2s ease;
-    }
-    button[data-baseweb="tab"][aria-selected="true"] {
+        padding: 6px 20px !important; transition: background 0.2s ease, color 0.2s ease;
+        cursor: pointer; color: {C_TEXT};
+    }}
+    [data-testid="stTab"] p {{ color: inherit; }}
+    [data-testid="stTab"][aria-selected="true"] {{
         background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
         color: #ffffff !important;
-    }
-    div[data-testid="stTabs"] [data-baseweb="tab-highlight"] { display: none; }
-    div[data-testid="stTabs"] [data-baseweb="tab-border"] { display: none; }
-
-    /* Tắt kiểu "dính cố định" (sticky) mặc định của thanh tab — kiểu này hay bị
-       chồng chữ / lỗi hiển thị khi cuộn trang trên một số trình duyệt. */
-    div[data-testid="stTabs"] { position: static !important; }
-    div[data-testid="stTabs"] > div:first-child {
-        position: static !important; top: auto !important;
-        background: #f8fafc; z-index: auto !important;
-    }
+    }}
+    [data-testid="stTab"] .react-aria-SelectionIndicator {{ display: none; }}
+    [data-testid="stTabs"] [role="tablist"] {{ background: {C_BG}; }}
 
     /* Thanh công cụ trên cùng của Streamlit (chỗ có nút ☰) mặc định trong suốt,
        nên khi cuộn trang, chữ của trang bị "lộ" xuyên qua gây cảm giác chồng chữ.
        Tô nền đặc cho thanh này để che hẳn phần nội dung cuộn qua bên dưới. */
-    header[data-testid="stHeader"] {
-        background: #f8fafc !important;
+    header[data-testid="stHeader"] {{
+        background: {C_BG} !important;
         box-shadow: 0 1px 0 rgba(16, 24, 40, 0.06);
-    }
+    }}
+
+    /* --- Chế độ tối: nền/chữ của sidebar, tiêu đề, chú thích, ô nhập liệu ---
+       (đặt màu chữ trên chính khung chứa để chữ bên trong tự kế thừa màu — nhiều
+       thẻ tiêu đề/nhãn của Streamlit dùng color: inherit nên phải làm theo cách này). */
+    section[data-testid="stSidebar"] {{ background-color: {C_SIDEBAR}; color: {C_TEXT}; }}
+    [data-testid="stMarkdownContainer"] {{ color: {C_TEXT}; }}
+    [data-testid="stCaptionContainer"] {{ color: {C_MUTED}; }}
+    [data-testid="stWidgetLabel"] {{ color: {C_TEXT}; }}
+    .stApp input, .stApp textarea {{
+        background-color: {C_CARD} !important; color: {C_TEXT} !important; border-color: {C_BORDER} !important;
+    }}
+    [data-testid="stSelectbox"] > div {{
+        background-color: {C_CARD}; color: {C_TEXT}; border-color: {C_BORDER};
+    }}
 </style>
 """, unsafe_allow_html=True)
 
