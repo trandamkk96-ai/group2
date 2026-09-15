@@ -414,7 +414,12 @@ if dark_mode:
 st.markdown(f"""
 <style>
     html, body {{ background-color: {C_BG} !important; }}
-    .stApp {{ background-color: {C_BG} !important; position: relative; z-index: 0; }}
+    /* LƯU Ý: .stApp của Streamlit vốn đã là position: absolute; inset: 0 (để tự phủ kín màn hình).
+       KHÔNG được ghi đè "position" ở đây — nếu đổi thành "relative" thì khung này sẽ co về
+       chiều cao 0 (vì "inset" chỉ kéo giãn khi position là absolute/fixed), khiến toàn bộ
+       trang bị cắt mất (overflow: hidden) và hiện trắng trơn. Chỉ cần z-index là đủ để tạo
+       ngữ cảnh xếp lớp cho bầu trời sao, vì .stApp vốn đã "positioned" sẵn rồi. */
+    .stApp {{ background-color: {C_BG} !important; z-index: 0; }}
     [data-testid="stAppViewContainer"] {{ background-color: {C_BG} !important; }}
     [data-testid="stMain"] {{ background-color: transparent !important; }}
     .block-container {{ padding-top: 5rem; max-width: 960px; position: relative; z-index: 1; }}
