@@ -1,7 +1,7 @@
 import html
 import io
 import random
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 import pandas as pd
 import qrcode
@@ -30,8 +30,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("15/09/2026", "Thêm 🕒 Tự động đổi giao diện theo giờ Hà Nội (sau 18h tối tự bật Chế độ tối, sau 6h sáng tự chuyển lại Chế độ sáng — bật ở thanh bên). Chế độ sáng giờ cũng có \"bầu trời\" riêng cho hợp với Chế độ tối: nền trời xanh nhạt, mặt trời phát sáng, mây trôi nhẹ nhàng."),
-    ("15/09/2026", "Chế độ tối giờ có giao diện bầu trời sao ✨ — nền đen lấp lánh sao, có mặt trăng phát sáng góc trên, sao băng bay ngang qua dày hơn hẳn. Thêm tab Tin tức (chỉ Admin đăng/xoá được, ai cũng xem được) — tin mới nhất còn hiện ngay trên Trang chủ. Giờ có 4 tab: Trang chủ / Tin tức / Cập nhật / Góp ý, mỗi tab có banner màu riêng. Thêm Chế độ tối (nút 🌙 ở thanh bên), sắp xếp theo tên A-Z, giao diện sinh động hơn. Mã QR mở nhanh, Nhật ký hoạt động chung."),
+    ("15/09/2026", "Chế độ tối giờ có giao diện bầu trời sao ✨ — nền đen lấp lánh sao, thỉnh thoảng có sao băng bay ngang qua. Thêm tab Tin tức (chỉ Admin đăng/xoá được, ai cũng xem được) — tin mới nhất còn hiện ngay trên Trang chủ. Giờ có 4 tab: Trang chủ / Tin tức / Cập nhật / Góp ý, mỗi tab có banner màu riêng. Thêm Chế độ tối (nút 🌙 ở thanh bên), sắp xếp theo tên A-Z, giao diện sinh động hơn. Mã QR mở nhanh, Nhật ký hoạt động chung."),
     ("14/09/2026", "Thêm bộ lọc lịch sử theo ngày, biểu đồ xu hướng điểm, huy hiệu thành tích, xuất file PDF."),
     ("12/09/2026", "Thêm hộp góp ý (chỉ Admin đọc), avatar, bục podium top 3, tìm kiếm thành viên, hoàn tác."),
 ]
@@ -370,52 +369,22 @@ def delete_news(news_id):
 
 # ---------------------------------------------------------------
 # CHẾ ĐỘ TỐI — đặt sớm (trước CSS) để tính màu cho toàn bộ giao diện bên dưới.
-# Có thể bật thủ công (nút 🌙), hoặc để web TỰ ĐỘNG đổi theo giờ Hà Nội:
-# sau 18h (6 giờ tối) tự bật Chế độ tối, sau 6h sáng tự chuyển lại Chế độ sáng.
-# Việt Nam không đổi giờ theo mùa nên dùng thẳng UTC+7, không cần cài thêm gì.
 # ---------------------------------------------------------------
-GIO_HA_NOI = timezone(timedelta(hours=7))
-
-
-def _dang_la_ban_dem_o_ha_noi() -> bool:
-    gio = datetime.now(GIO_HA_NOI).hour
-    return gio >= 18 or gio < 6
-
-
-auto_theme = st.sidebar.toggle(
-    "🕒 Tự động theo giờ Hà Nội",
-    key="auto_theme",
-    help="Bật lên: sau 18h tối web tự chuyển Chế độ tối, sau 6h sáng tự chuyển lại Chế độ sáng — không cần bấm tay.",
-)
-dark_mode_thu_cong = st.sidebar.toggle(
-    "🌙 Chế độ tối", key="dark_mode", disabled=auto_theme,
-)
-
-if auto_theme:
-    dark_mode = _dang_la_ban_dem_o_ha_noi()
-    gio_hien_tai = datetime.now(GIO_HA_NOI).strftime("%H:%M")
-    st.sidebar.caption(f"🕒 Giờ Hà Nội: {gio_hien_tai} — đang tự bật {'🌙 Chế độ tối' if dark_mode else '☀️ Chế độ sáng'}")
-else:
-    dark_mode = dark_mode_thu_cong
+dark_mode = st.sidebar.toggle("🌙 Chế độ tối", key="dark_mode")
 
 if dark_mode:
     C_BG, C_CARD, C_BORDER, C_TEXT, C_MUTED, C_TRACK, C_SIDEBAR = (
         "#0f172a", "#1e293b", "#334155", "#e2e8f0", "#94a3b8", "#334155", "#111827",
     )
-    C_BG_CSS = C_BG  # ban đêm: nền xanh than đặc, để bầu trời sao làm điểm nhấn
 else:
     C_BG, C_CARD, C_BORDER, C_TEXT, C_MUTED, C_TRACK, C_SIDEBAR = (
         "#f8fafc", "#ffffff", "#eef0f3", "#111827", "#9ca3af", "#f1f5f9", "#ffffff",
     )
-    # ban ngày: nền trời xanh nhạt đổ dần xuống trắng — hợp với mặt trời + mây ở dưới,
-    # thay vì một màu xám trắng phẳng lì như trước.
-    C_BG_CSS = "linear-gradient(180deg, #dbeafe 0%, #eff6ff 32%, #f8fafc 65%)"
 
 
 def _make_starfield_html():
     """Tạo nền bầu trời sao cho Chế độ tối: các chấm sao lấp lánh (kỹ thuật box-shadow,
-    không cần JavaScript) + sao băng bay ngang qua màn hình dày đặc hơn (~60 lần/phút,
-    rải đều nên nhiều lúc có 2-3 vệt sao băng cùng lúc trên trời)."""
+    không cần JavaScript) + ~20 ngôi sao băng bay ngang qua màn hình mỗi phút."""
 
     def _dots(n):
         return ", ".join(
@@ -425,14 +394,13 @@ def _make_starfield_html():
 
     stars_small, stars_medium, stars_large = _dots(150), _dots(60), _dots(25)
 
-    SO_SAO_BANG = 60  # ~60 sao băng/phút — chỉnh số này để dày/thưa hơn
     shooting_stars = "".join(
         '<div class="shooting-star" style="top:{top}vh; left:{left}vw; animation-delay:{delay}s;"></div>'.format(
             top=round(random.uniform(2, 55), 1),
             left=round(random.uniform(15, 95), 1),
-            delay=round(i * (60 / SO_SAO_BANG), 2),
+            delay=i * 3,
         )
-        for i in range(SO_SAO_BANG)
+        for i in range(20)
     )
     return stars_small, stars_medium, stars_large, shooting_stars
 
@@ -445,14 +413,9 @@ if dark_mode:
 # ---------------------------------------------------------------
 st.markdown(f"""
 <style>
-    html, body {{ background: {C_BG_CSS} !important; }}
-    /* LƯU Ý: .stApp của Streamlit vốn đã là position: absolute; inset: 0 (để tự phủ kín màn hình).
-       KHÔNG được ghi đè "position" ở đây — nếu đổi thành "relative" thì khung này sẽ co về
-       chiều cao 0 (vì "inset" chỉ kéo giãn khi position là absolute/fixed), khiến toàn bộ
-       trang bị cắt mất (overflow: hidden) và hiện trắng trơn. Chỉ cần z-index là đủ để tạo
-       ngữ cảnh xếp lớp cho bầu trời sao / bầu trời ban ngày, vì .stApp vốn đã "positioned" sẵn rồi. */
-    .stApp {{ background: {C_BG_CSS} !important; z-index: 0; }}
-    [data-testid="stAppViewContainer"] {{ background: {C_BG_CSS} !important; }}
+    html, body {{ background-color: {C_BG} !important; }}
+    .stApp {{ background-color: {C_BG} !important; position: relative; z-index: 0; }}
+    [data-testid="stAppViewContainer"] {{ background-color: {C_BG} !important; }}
     [data-testid="stMain"] {{ background-color: transparent !important; }}
     .block-container {{ padding-top: 5rem; max-width: 960px; position: relative; z-index: 1; }}
 
@@ -644,7 +607,7 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Bầu trời sao cho Chế độ tối (sao lấp lánh + sao băng dày đặc + mặt trăng) ---
+# --- Bầu trời sao cho Chế độ tối (sao lấp lánh + ~20 sao băng/phút) ---
 # Chỉ hiện khi bật Chế độ tối; ở giao diện thường (sáng) không có gì thay đổi ở đây.
 if dark_mode:
     st.markdown(f"""
@@ -676,91 +639,12 @@ if dark_mode:
             98.5% {{ opacity: 1; transform: translate(-340px, 240px) rotate(-35deg); }}
             100% {{ opacity: 0; transform: translate(-380px, 270px) rotate(-35deg); }}
         }}
-
-        /* --- Mặt trăng: hình tròn vẽ bằng CSS (radial-gradient + vài "miệng hố" bằng
-           box-shadow), có quầng sáng nhẹ nhàng lên xuống cho sinh động. --- */
-        .moon {{
-            position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
-            border-radius: 50%;
-            background: radial-gradient(circle at 35% 32%, #fffef4 0%, #fdf6d8 45%, #e9e0b0 75%, #d9d093 100%);
-            animation: moonGlow 6s ease-in-out infinite;
-        }}
-        .moon::before, .moon::after {{
-            content: ""; position: absolute; border-radius: 50%; background: rgba(120, 110, 70, 0.18);
-        }}
-        .moon::before {{ width: 16px; height: 16px; top: 13px; left: 15px; }}
-        .moon::after {{
-            width: 10px; height: 10px; top: 40px; left: 42px;
-            box-shadow: -22px 6px 0 -2px rgba(120, 110, 70, 0.16);
-        }}
-        @keyframes moonGlow {{
-            0%, 100% {{ box-shadow: 0 0 45px 12px rgba(255, 250, 224, 0.5), 0 0 90px 35px rgba(255, 250, 224, 0.2); }}
-            50% {{ box-shadow: 0 0 55px 16px rgba(255, 250, 224, 0.7), 0 0 110px 42px rgba(255, 250, 224, 0.32); }}
-        }}
-        @media (max-width: 640px) {{
-            .moon {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
-            .moon::before {{ width: 12px; height: 12px; top: 9px; left: 11px; }}
-            .moon::after {{ width: 7px; height: 7px; top: 29px; left: 30px; box-shadow: -16px 4px 0 -2px rgba(120, 110, 70, 0.16); }}
-        }}
     </style>
     <div class="starfield">
-        <div class="moon"></div>
         <div class="stars-small"></div>
         <div class="stars-medium"></div>
         <div class="stars-large"></div>
         {SHOOTING_STARS_HTML}
-    </div>
-    """, unsafe_allow_html=True)
-else:
-    # --- Bầu trời ban ngày cho Chế độ sáng: mặt trời phát sáng + vài đám mây trôi nhẹ ---
-    # đặt cùng vị trí với mặt trăng bên Chế độ tối cho hai giao diện "đối xứng" nhau.
-    # Vị trí mây random nhẹ mỗi lần tải trang, cho đỡ nhàm khi ai cũng thấy y hệt nhau.
-    _may = [
-        (round(random.uniform(8, 16), 1), round(random.uniform(5, 25), 1), 22),
-        (round(random.uniform(28, 40), 1), round(random.uniform(60, 80), 1), 26),
-        (round(random.uniform(48, 60), 1), round(random.uniform(15, 35), 1), 18),
-    ]
-    CLOUDS_HTML = "".join(
-        f'<div class="cloud" style="top:{top}vh; left:{left}vw; animation-delay:{-i * 4}s; '
-        f'transform: scale({scale / 22});"></div>'
-        for i, (top, left, scale) in enumerate(_may)
-    )
-    st.markdown(f"""
-    <style>
-        .daysky {{ position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }}
-
-        /* --- Mặt trời: hình tròn vẽ bằng CSS, ánh sáng ấm, quầng sáng nhấp nháy nhẹ --- */
-        .sun {{
-            position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
-            border-radius: 50%;
-            background: radial-gradient(circle at 35% 32%, #fffdf2 0%, #ffe89b 40%, #ffc857 75%, #ffb347 100%);
-            animation: sunGlow 5s ease-in-out infinite;
-        }}
-        @keyframes sunGlow {{
-            0%, 100% {{ box-shadow: 0 0 45px 14px rgba(255, 200, 87, 0.45), 0 0 90px 38px rgba(255, 200, 87, 0.18); }}
-            50% {{ box-shadow: 0 0 58px 18px rgba(255, 200, 87, 0.6), 0 0 110px 46px rgba(255, 200, 87, 0.28); }}
-        }}
-        @media (max-width: 640px) {{
-            .sun {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
-        }}
-
-        /* --- Mây trôi: 1 khối bo tròn + 2 "cục bông" (::before/::after) ghép lại --- */
-        .cloud {{
-            position: fixed; width: 90px; height: 32px; border-radius: 999px;
-            background: #ffffff; opacity: 0.8;
-            box-shadow: 0 6px 14px rgba(148, 163, 184, 0.18);
-            animation: troiMay 22s ease-in-out infinite alternate;
-        }}
-        .cloud::before, .cloud::after {{
-            content: ""; position: absolute; border-radius: 50%; background: #ffffff;
-        }}
-        .cloud::before {{ width: 46px; height: 46px; top: -22px; left: 10px; }}
-        .cloud::after {{ width: 36px; height: 36px; top: -15px; left: 44px; }}
-        @keyframes troiMay {{ from {{ transform: translateX(-16px); }} to {{ transform: translateX(16px); }} }}
-    </style>
-    <div class="daysky">
-        <div class="sun"></div>
-        {CLOUDS_HTML}
     </div>
     """, unsafe_allow_html=True)
 
