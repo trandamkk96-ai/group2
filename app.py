@@ -2,6 +2,7 @@ import io
 from datetime import date, timedelta
 
 import pandas as pd
+import qrcode
 import streamlit as st
 from sqlalchemy import text
 from reportlab.lib import colors
@@ -160,6 +161,25 @@ def load_last_entry():
         'SELECT id, ten, so_diem, ly_do, ngay FROM history ORDER BY ngay DESC, id DESC LIMIT 1',
         ttl=0,
     )
+
+
+def load_recent_activity(limit=15):
+    """Nhật ký hoạt động chung của CẢ NHÓM — các lần cộng/trừ điểm gần nhất, không phân biệt ai."""
+    return conn.query(
+        'SELECT ten AS "Thành viên", ngay AS "Ngày", so_diem AS "Điểm", '
+        '       ly_do AS "Lý do", xac_nhan AS "Xác nhận" '
+        'FROM history ORDER BY ngay DESC, id DESC LIMIT :lim',
+        params={"lim": limit},
+        ttl=0,
+    )
+
+
+def make_qr_bytes(url):
+    """Tạo ảnh mã QR (PNG) từ 1 đường link."""
+    img = qrcode.make(url, box_size=8, border=2)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 
 def to_excel_bytes(members_df, history_df):
@@ -489,6 +509,30 @@ st.markdown(
 members_df = load_members()
 
 # ---------------------------------------------------------------
+# MÃ QR MỞ NHANH
+# ---------------------------------------------------------------
+with st.expander("📱 Mã QR mở nhanh (để chia sẻ cho mọi người quét)"):
+    default_url = st.secrets.get("app_url", "")
+    app_url_input = st.text_input(
+        "Dán link app của bạn vào đây (xem trên thanh địa chỉ trình duyệt):",
+        value=default_url,
+        placeholder="https://ten-app-cua-ban.streamlit.app",
+    )
+    if app_url_input.strip():
+        st.image(
+            make_qr_bytes(app_url_input.strip()),
+            caption="Quét mã này bằng camera điện thoại để mở app ngay",
+            width=200,
+        )
+        if not default_url:
+            st.caption(
+                "Mẹo: thêm dòng app_url = \"link-cua-ban\" vào Secrets trên Streamlit Cloud "
+                "để lần sau mở trang khỏi cần dán lại link."
+            )
+    else:
+        st.caption("Dán link app vào ô trên để tạo mã QR dùng chung.")
+
+# ---------------------------------------------------------------
 # LỌC LỊCH SỬ THEO KHOẢNG THỜI GIAN (áp dụng cho lịch sử xem + xuất file)
 # ---------------------------------------------------------------
 with st.expander("📅 Lọc lịch sử theo khoảng thời gian"):
@@ -710,6 +754,19 @@ else:
                         st.dataframe(hist_df, use_container_width=True, hide_index=True)
                     else:
                         st.caption("Chưa có lịch sử cộng/trừ điểm.")
+
+
+# ---------------------------------------------------------------
+# NHẬT KÝ HOẠT ĐỘNG CHUNG (cả nhóm, không cần mở từng người)
+# ---------------------------------------------------------------
+if not members_df.empty:
+    st.markdown("---")
+    st.subheader("🗞️ Nhật ký hoạt động gần đây")
+    recent_activity_df = load_recent_activity(limit=15)
+    if recent_activity_df.empty:
+        st.caption("Chưa có hoạt động cộng/trừ điểm nào.")
+    else:
+        st.dataframe(recent_activity_df, use_container_width=True, hide_index=True)
 
 
 # ---------------------------------------------------------------
