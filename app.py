@@ -23,7 +23,7 @@ st.set_page_config(page_title="Quản Lý Điểm Nhóm", page_icon="🏆", layo
 
 # Link app cố định — nếu sau này đổi sang link/tên miền khác, chỉ cần sửa đúng dòng này
 # rồi cập nhật lại app.py trên GitHub là mã QR sẽ tự cập nhật theo.
-APP_URL = "https://group2-bl2ar8lcntmbxvkfxy4n7.streamlit.app/"
+APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 
 # --- Kết nối database ---------------------------------------------------
 conn = st.connection("supabase_db", type="sql")
