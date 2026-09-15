@@ -1,6 +1,7 @@
 import html
 import io
 import random
+import re
 from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
@@ -30,6 +31,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("15/09/2026", "📅 Thêm tab Thời khóa biểu (kế bên Trang chủ) — ai cũng xem được, Admin sửa thẳng trên web trong 10 giây (không cần vào GitHub nữa): mở tab này → bấm \"Sửa thời khóa biểu\" → gõ lại → Lưu là xong ngay."),
     ("15/09/2026", "⚡ Giảm tải cho điện thoại yếu: bớt bớt số sao/sao băng chạy hoạt ảnh ở Chế độ tối (trang mượt hơn hẳn), điện thoại màn nhỏ tự động bớt thêm một nửa sao băng, máy nào bật \"Giảm chuyển động\" thì web tự tắt hẳn hoạt ảnh trang trí."),
     ("15/09/2026", "🕒 Tự động đổi giao diện theo giờ Hà Nội — giờ BẬT SẴN mặc định, ai mở trang cũng tự đúng giờ luôn (sau 18h tối tự Chế độ tối, sau 6h sáng tự Chế độ sáng), không cần bấm gì; vẫn có thể tắt tự động để tự chọn thủ công. Chế độ sáng giờ cũng có \"bầu trời\" riêng cho hợp với Chế độ tối: nền trời xanh nhạt, mặt trời phát sáng, mây trôi nhẹ nhàng."),
     ("15/09/2026", "Chế độ tối giờ có giao diện bầu trời sao ✨ — nền đen lấp lánh sao, có mặt trăng phát sáng góc trên, sao băng bay ngang qua dày hơn hẳn. Thêm tab Tin tức (chỉ Admin đăng/xoá được, ai cũng xem được) — tin mới nhất còn hiện ngay trên Trang chủ. Giờ có 4 tab: Trang chủ / Tin tức / Cập nhật / Góp ý, mỗi tab có banner màu riêng. Thêm Chế độ tối (nút 🌙 ở thanh bên), sắp xếp theo tên A-Z, giao diện sinh động hơn. Mã QR mở nhanh, Nhật ký hoạt động chung."),
@@ -74,10 +76,42 @@ def init_db():
                 ngay TIMESTAMP NOT NULL DEFAULT now()
             )
         """))
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS thoikhoabieu (
+                id SERIAL PRIMARY KEY,
+                noi_dung TEXT NOT NULL,
+                ngay TIMESTAMP NOT NULL DEFAULT now()
+            )
+        """))
         s.commit()
 
 
 init_db()
+
+# Thời khóa biểu mặc định — chỉ dùng để "gieo" 1 lần duy nhất lúc bảng thoikhoabieu còn trống
+# (lần đầu chạy sau khi thêm tính năng này). Sau đó Admin có thể sửa thẳng trên web, không cần
+# đụng vào đây nữa — xem hướng dẫn "cách đổi thời khóa biểu nhanh gọn" mình nhắn kèm bên dưới.
+TKB_MAC_DINH = """THỜI KHÓA BIỂU LỚP 9/7 (ÁP DỤNG TỪ THỨ 2 NGÀY 14/9/2026)
+
+Thứ 2: HĐTN (2T) • Toán • Ngữ văn (2T)
+Thứ 3: KHTN Hóa (2T) • LS&ĐL • HĐTN • KHTN Sinh
+Thứ 4: Mỹ thuật • Âm nhạc • Toán (2T) • Tin học
+Thứ 5: LS&ĐL • GDCD • Tiếng Anh (2T) • KHTN Lý
+Thứ 6: LS&ĐL • Ngữ văn (2T) • Tiếng Anh • Toán
+Thứ 7: Công nghệ • SHL"""
+
+
+def _gieo_tkb_neu_trong():
+    """Nếu bảng thời khóa biểu chưa có dòng nào (mới thêm tính năng lần đầu), tự điền sẵn
+    thời khóa biểu hiện tại vào — để tab không bị trống trơn ngay từ đầu."""
+    so_dong = conn.query("SELECT COUNT(*) AS n FROM thoikhoabieu", ttl=0).iloc[0]["n"]
+    if so_dong == 0:
+        with conn.session as s:
+            s.execute(text("INSERT INTO thoikhoabieu (noi_dung) VALUES (:nd)"), {"nd": TKB_MAC_DINH})
+            s.commit()
+
+
+_gieo_tkb_neu_trong()
 
 
 # --- Truy vấn dữ liệu -----------------------------------------------------
@@ -369,6 +403,41 @@ def delete_news(news_id):
         s.commit()
 
 
+def add_thoikhoabieu(noi_dung):
+    """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi). Mỗi lần Admin lưu là
+    thêm 1 bản ghi mới — nên tự nhiên có luôn "lịch sử" các bản thời khóa biểu cũ, không mất gì."""
+    with conn.session as s:
+        s.execute(text("INSERT INTO thoikhoabieu (noi_dung) VALUES (:nd)"), {"nd": noi_dung})
+        s.commit()
+
+
+def load_thoikhoabieu_hien_tai():
+    """Lấy bản thời khóa biểu mới nhất (bản Admin lưu gần đây nhất)."""
+    return conn.query('SELECT id, noi_dung, ngay FROM thoikhoabieu ORDER BY ngay DESC LIMIT 1', ttl=0)
+
+
+_MAU_DONG_THU = re.compile(r"^\s*Thứ\s*(\d+|Bảy|bảy|CN|cn)\s*[:：]\s*(.+?)\s*$")
+
+
+def _tach_dong_tkb(noi_dung):
+    """Tách nội dung thời khóa biểu (dạng chữ, Admin gõ tự do) thành:
+    - cac_dong_dau: những dòng KHÔNG theo mẫu "Thứ x: ..." (thường là dòng tiêu đề/ghi chú)
+    - cac_ngay: list (tên thứ, nội dung) cho những dòng ĐÚNG mẫu "Thứ x: ..."
+    Nhờ vậy Admin gõ sao cũng hiển thị được — đúng mẫu thì lên thẻ đẹp, không đúng mẫu thì
+    vẫn hiện ra như một dòng ghi chú bình thường, không bao giờ mất nội dung."""
+    cac_dong_dau, cac_ngay = [], []
+    for dong_tho in (noi_dung or "").splitlines():
+        dong = dong_tho.strip()
+        if not dong:
+            continue
+        khop = _MAU_DONG_THU.match(dong)
+        if khop:
+            cac_ngay.append((f"Thứ {khop.group(1)}", khop.group(2)))
+        else:
+            cac_dong_dau.append(dong)
+    return cac_dong_dau, cac_ngay
+
+
 # ---------------------------------------------------------------
 # CHẾ ĐỘ TỐI — đặt sớm (trước CSS) để tính màu cho toàn bộ giao diện bên dưới.
 # Có thể bật thủ công (nút 🌙), hoặc để web TỰ ĐỘNG đổi theo giờ Hà Nội:
@@ -487,8 +556,30 @@ st.markdown(f"""
         background: linear-gradient(135deg, #10b981 0%, #0ea5e9 100%);
         box-shadow: 0 8px 20px rgba(16, 185, 129, 0.25);
     }}
+    .tab-hero.schedule {{
+        background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+        box-shadow: 0 8px 20px rgba(14, 165, 233, 0.25);
+    }}
     .tab-hero-title {{ font-size: 1.3rem; font-weight: 800; margin: 0; }}
     .tab-hero-subtitle {{ opacity: 0.92; font-size: 0.88rem; margin-top: 4px; }}
+
+    /* --- Tab "Thời khóa biểu": dòng tiêu đề + từng thứ trong tuần --- */
+    .tkb-tieu-de {{
+        font-weight: 800; color: {C_TEXT}; font-size: 0.95rem; margin-bottom: 14px;
+        line-height: 1.5;
+    }}
+    .tkb-dong {{
+        display: flex; align-items: center; gap: 14px;
+        background: {C_CARD}; border: 1px solid {C_BORDER}; border-left: 4px solid #0ea5e9;
+        border-radius: 12px; padding: 12px 18px; margin-bottom: 10px;
+        animation: fadeInUp 0.4s ease both;
+    }}
+    .tkb-thu {{
+        flex: 0 0 auto; min-width: 62px; text-align: center;
+        background: linear-gradient(135deg, #0ea5e9, #6366f1); color: white;
+        font-weight: 800; font-size: 0.82rem; border-radius: 999px; padding: 5px 12px;
+    }}
+    .tkb-mon {{ color: {C_TEXT}; font-size: 0.95rem; line-height: 1.5; }}
 
     /* --- Banner "Tin mới nhất" hiện gọn trên Trang chủ (khi Admin có đăng tin) --- */
     .home-news-banner {{
@@ -880,10 +971,10 @@ else:
 
 
 # ---------------------------------------------------------------
-# 4 TAB CHÍNH: Trang chủ / Tin tức / Cập nhật / Góp ý
+# 5 TAB CHÍNH: Trang chủ / Thời khóa biểu / Tin tức / Cập nhật / Góp ý
 # ---------------------------------------------------------------
-tab_home, tab_news, tab_update, tab_feedback = st.tabs(
-    ["🏠 Trang chủ", "📰 Tin tức", "🆕 Cập nhật", "💬 Góp ý"]
+tab_home, tab_tkb, tab_news, tab_update, tab_feedback = st.tabs(
+    ["🏠 Trang chủ", "📅 Thời khóa biểu", "📰 Tin tức", "🆕 Cập nhật", "💬 Góp ý"]
 )
 
 # =================================================================
@@ -1182,7 +1273,66 @@ with tab_home:
 
 
 # =================================================================
-# TAB 2 — TIN TỨC (chỉ Admin đăng/xoá được — ai cũng xem được)
+# TAB 2 — THỜI KHÓA BIỂU (chỉ Admin sửa được — ai cũng xem được)
+#
+# CÁCH ĐỔI THỜI KHÓA BIỂU NHANH GỌN — KHÔNG CẦN ĐỘNG VÀO CODE NỮA:
+# đăng nhập Admin ở thanh bên → vào tab này → sửa thẳng trong khung chữ (vẫn theo
+# đúng mẫu "Thứ 2: ...", mỗi thứ 1 dòng) → bấm "Lưu thời khóa biểu" là xong ngay,
+# không cần vào GitHub, không cần dán code, không cần chờ Streamlit deploy lại gì cả.
+# =================================================================
+with tab_tkb:
+    st.markdown(
+        '<div class="tab-hero schedule">'
+        '<div class="tab-hero-title">📅 Thời khóa biểu</div>'
+        '<div class="tab-hero-subtitle">Lịch học trong tuần của lớp</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    tkb_hien_tai = load_thoikhoabieu_hien_tai()
+    noi_dung_tkb_hien_tai = tkb_hien_tai.iloc[0]["noi_dung"] if not tkb_hien_tai.empty else TKB_MAC_DINH
+
+    if is_admin:
+        with st.expander("✏️ Sửa thời khóa biểu (chỉ Admin thấy mục này)"):
+            st.caption(
+                "Gõ mỗi thứ 1 dòng, theo mẫu **Thứ 2: Toán • Ngữ văn (2T)** — dấu chấm tròn "
+                "\"•\" chỉ để cho đẹp, không bắt buộc, gõ dấu phẩy hay gạch ngang cũng được. "
+                "Dòng đầu (tiêu đề) muốn ghi gì cũng được."
+            )
+            with st.form("form_sua_tkb"):
+                noi_dung_tkb_moi = st.text_area(
+                    "Nội dung thời khóa biểu:", value=noi_dung_tkb_hien_tai, height=260,
+                )
+                da_luu_tkb = st.form_submit_button("💾 Lưu thời khóa biểu", use_container_width=True)
+                if da_luu_tkb:
+                    if noi_dung_tkb_moi.strip():
+                        add_thoikhoabieu(noi_dung_tkb_moi.strip())
+                        st.success("Đã lưu thời khóa biểu mới!")
+                        st.rerun()
+                    else:
+                        st.error("Nội dung không được để trống.")
+        st.write("")
+
+    cac_dong_dau, cac_ngay_hoc = _tach_dong_tkb(noi_dung_tkb_hien_tai)
+
+    for dong in cac_dong_dau:
+        st.markdown(f'<div class="tkb-tieu-de">{html.escape(dong)}</div>', unsafe_allow_html=True)
+
+    if not cac_ngay_hoc:
+        st.caption("Chưa có thời khóa biểu.")
+    else:
+        for thu, mon_hoc in cac_ngay_hoc:
+            st.markdown(
+                '<div class="tkb-dong">'
+                f'<div class="tkb-thu">{html.escape(thu)}</div>'
+                f'<div class="tkb-mon">{html.escape(mon_hoc)}</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+
+
+# =================================================================
+# TAB 3 — TIN TỨC (chỉ Admin đăng/xoá được — ai cũng xem được)
 # =================================================================
 with tab_news:
     st.markdown(
@@ -1229,7 +1379,7 @@ with tab_news:
 
 
 # =================================================================
-# TAB 3 — CẬP NHẬT (nhật ký các tính năng mới của web)
+# TAB 4 — CẬP NHẬT (nhật ký các tính năng mới của web)
 # =================================================================
 with tab_update:
     st.markdown(
@@ -1249,7 +1399,7 @@ with tab_update:
 
 
 # =================================================================
-# TAB 4 — GÓP Ý (công khai gửi, chỉ Admin đọc — ở sidebar)
+# TAB 5 — GÓP Ý (công khai gửi, chỉ Admin đọc — ở sidebar)
 # =================================================================
 with tab_feedback:
     st.markdown(
