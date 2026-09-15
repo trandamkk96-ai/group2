@@ -28,7 +28,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("15/09/2026", "Thêm Chế độ tối (nút 🌙 ở thanh bên), sắp xếp theo tên A-Z, giao diện sinh động hơn (hiệu ứng xuất hiện, bục vàng phát sáng, tab bo tròn dạng viên thuốc). Mã QR mở nhanh, Nhật ký hoạt động chung, 2 tab Trang chủ / Cập nhật."),
+    ("15/09/2026", "Tách Góp ý thành tab riêng — giờ có 3 tab: Trang chủ / Cập nhật / Góp ý, mỗi tab có banner màu riêng. Thêm Chế độ tối (nút 🌙 ở thanh bên), sắp xếp theo tên A-Z, giao diện sinh động hơn (hiệu ứng xuất hiện, bục vàng phát sáng, tab bo tròn dạng viên thuốc). Mã QR mở nhanh, Nhật ký hoạt động chung."),
     ("14/09/2026", "Thêm bộ lọc lịch sử theo ngày, biểu đồ xu hướng điểm, huy hiệu thành tích, xuất file PDF."),
     ("12/09/2026", "Thêm hộp góp ý (chỉ Admin đọc), avatar, bục podium top 3, tìm kiếm thành viên, hoàn tác."),
 ]
@@ -365,6 +365,35 @@ st.markdown(f"""
     .hero-title {{ font-size: 1.9rem; font-weight: 800; margin: 0; }}
     .hero-subtitle {{ opacity: 0.9; font-size: 0.95rem; margin-top: 4px; }}
 
+    /* --- Banner nhỏ đầu mỗi tab (Cập nhật / Góp ý) --- */
+    .tab-hero {{
+        border-radius: 16px; padding: 18px 24px; margin-bottom: 20px; color: white;
+        animation: fadeInUp 0.4s ease both;
+    }}
+    .tab-hero.update {{
+        background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+        box-shadow: 0 8px 20px rgba(245, 158, 11, 0.25);
+    }}
+    .tab-hero.feedback {{
+        background: linear-gradient(135deg, #10b981 0%, #0ea5e9 100%);
+        box-shadow: 0 8px 20px rgba(16, 185, 129, 0.25);
+    }}
+    .tab-hero-title {{ font-size: 1.3rem; font-weight: 800; margin: 0; }}
+    .tab-hero-subtitle {{ opacity: 0.92; font-size: 0.88rem; margin-top: 4px; }}
+
+    /* --- Danh sách "Cập nhật mới nhất" dạng timeline --- */
+    .update-item {{
+        background: {C_CARD}; border: 1px solid {C_BORDER}; border-left: 4px solid #f59e0b;
+        border-radius: 12px; padding: 12px 18px; margin-bottom: 12px;
+        animation: fadeInUp 0.4s ease both;
+    }}
+    .update-date {{ font-weight: 800; color: {C_TEXT}; font-size: 0.95rem; }}
+    .update-desc {{ color: {C_MUTED}; font-size: 0.9rem; margin-top: 3px; line-height: 1.5; }}
+    .badge-chip.update-badge {{
+        background: #fed7aa; color: #9a3412; font-size: 0.65rem; vertical-align: middle;
+        margin-left: 6px;
+    }}
+
     div[data-testid="stMetric"] {{
         background: {C_CARD}; border: 1px solid {C_BORDER}; border-radius: 14px;
         padding: 12px 16px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
@@ -465,7 +494,9 @@ st.markdown(f"""
         color: #ffffff !important;
     }}
     [data-testid="stTab"] .react-aria-SelectionIndicator {{ display: none; }}
-    [data-testid="stTabs"] [role="tablist"] {{ background: {C_BG}; }}
+    [data-testid="stTabs"] [role="tablist"] {{
+        background: {C_BG}; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid {C_BORDER};
+    }}
 
     /* Thanh công cụ trên cùng của Streamlit (chỗ có nút ☰) mặc định trong suốt,
        nên khi cuộn trang, chữ của trang bị "lộ" xuyên qua gây cảm giác chồng chữ.
@@ -586,9 +617,9 @@ else:
 
 
 # ---------------------------------------------------------------
-# 3 TAB CHÍNH: Trang chủ / Cập nhật / Cộng đồng
+# 3 TAB CHÍNH: Trang chủ / Cập nhật / Góp ý
 # ---------------------------------------------------------------
-tab_home, tab_update = st.tabs(["🏠 Trang chủ", "🆕 Cập nhật"])
+tab_home, tab_update, tab_feedback = st.tabs(["🏠 Trang chủ", "🆕 Cập nhật", "💬 Góp ý"])
 
 # =================================================================
 # TAB 1 — TRANG CHỦ (toàn bộ nội dung cũ: điểm, xếp hạng, form, v.v.)
@@ -870,28 +901,45 @@ with tab_home:
             else:
                 st.line_chart(trend_df)
 
-    # --- Gửi góp ý (công khai gửi, chỉ Admin đọc — ở sidebar) ---
-    st.markdown("---")
-    st.subheader("💬 Gửi góp ý")
-    st.caption("Góp ý của bạn chỉ Admin đọc được, không hiển thị công khai cho người khác xem.")
+
+# =================================================================
+# TAB 2 — CẬP NHẬT (nhật ký các tính năng mới của web)
+# =================================================================
+with tab_update:
+    st.markdown(
+        '<div class="tab-hero update">'
+        '<div class="tab-hero-title">🆕 Cập nhật mới nhất trên web</div>'
+        '<div class="tab-hero-subtitle">Mỗi khi web có tính năng mới, thông tin sẽ được thêm vào đây</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    for i, (ngay_cn, noi_dung_cn) in enumerate(UPDATES):
+        moi_nhat = ' <span class="badge-chip update-badge">Mới nhất</span>' if i == 0 else ""
+        st.markdown(
+            f'<div class="update-item"><div class="update-date">{ngay_cn}{moi_nhat}</div>'
+            f'<div class="update-desc">{noi_dung_cn}</div></div>',
+            unsafe_allow_html=True,
+        )
+
+
+# =================================================================
+# TAB 3 — GÓP Ý (công khai gửi, chỉ Admin đọc — ở sidebar)
+# =================================================================
+with tab_feedback:
+    st.markdown(
+        '<div class="tab-hero feedback">'
+        '<div class="tab-hero-title">💬 Góp ý cho nhóm</div>'
+        '<div class="tab-hero-subtitle">Góp ý của bạn chỉ Admin đọc được, không hiển thị công khai cho người khác xem</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     with st.form("form_gop_y", clear_on_submit=True):
         nguoi_gui_fb = st.text_input("Tên bạn (để trống nếu muốn ẩn danh):")
         noi_dung_fb = st.text_area("Nội dung góp ý:")
-        da_gui = st.form_submit_button("Gửi góp ý", use_container_width=True)
+        da_gui = st.form_submit_button("📨 Gửi góp ý", use_container_width=True)
         if da_gui:
             if noi_dung_fb.strip():
                 add_feedback(nguoi_gui_fb.strip() or "Ẩn danh", noi_dung_fb.strip())
                 st.success("Cảm ơn bạn đã góp ý!")
             else:
                 st.error("Vui lòng nhập nội dung góp ý.")
-
-
-# =================================================================
-# TAB 2 — CẬP NHẬT (nhật ký các tính năng mới của web)
-# =================================================================
-with tab_update:
-    st.subheader("🆕 Cập nhật mới nhất trên web")
-    st.caption("Mỗi khi web có tính năng mới, thông tin sẽ được thêm vào đây.")
-    for ngay_cn, noi_dung_cn in UPDATES:
-        st.markdown(f"**{ngay_cn}** — {noi_dung_cn}")
-        st.markdown("---")
