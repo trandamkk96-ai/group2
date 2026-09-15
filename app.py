@@ -30,6 +30,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("15/09/2026", "⚡ Giảm tải cho điện thoại yếu: bớt bớt số sao/sao băng chạy hoạt ảnh ở Chế độ tối (trang mượt hơn hẳn), điện thoại màn nhỏ tự động bớt thêm một nửa sao băng, máy nào bật \"Giảm chuyển động\" thì web tự tắt hẳn hoạt ảnh trang trí."),
     ("15/09/2026", "🕒 Tự động đổi giao diện theo giờ Hà Nội — giờ BẬT SẴN mặc định, ai mở trang cũng tự đúng giờ luôn (sau 18h tối tự Chế độ tối, sau 6h sáng tự Chế độ sáng), không cần bấm gì; vẫn có thể tắt tự động để tự chọn thủ công. Chế độ sáng giờ cũng có \"bầu trời\" riêng cho hợp với Chế độ tối: nền trời xanh nhạt, mặt trời phát sáng, mây trôi nhẹ nhàng."),
     ("15/09/2026", "Chế độ tối giờ có giao diện bầu trời sao ✨ — nền đen lấp lánh sao, có mặt trăng phát sáng góc trên, sao băng bay ngang qua dày hơn hẳn. Thêm tab Tin tức (chỉ Admin đăng/xoá được, ai cũng xem được) — tin mới nhất còn hiện ngay trên Trang chủ. Giờ có 4 tab: Trang chủ / Tin tức / Cập nhật / Góp ý, mỗi tab có banner màu riêng. Thêm Chế độ tối (nút 🌙 ở thanh bên), sắp xếp theo tên A-Z, giao diện sinh động hơn. Mã QR mở nhanh, Nhật ký hoạt động chung."),
     ("14/09/2026", "Thêm bộ lọc lịch sử theo ngày, biểu đồ xu hướng điểm, huy hiệu thành tích, xuất file PDF."),
@@ -415,8 +416,12 @@ else:
 
 def _make_starfield_html():
     """Tạo nền bầu trời sao cho Chế độ tối: các chấm sao lấp lánh (kỹ thuật box-shadow,
-    không cần JavaScript) + sao băng bay ngang qua màn hình dày đặc hơn (~60 lần/phút,
-    rải đều nên nhiều lúc có 2-3 vệt sao băng cùng lúc trên trời)."""
+    không cần JavaScript) + sao băng bay ngang qua màn hình.
+
+    LƯU Ý HIỆU NĂNG: bản trước dùng 235 chấm sao + 60 sao băng chạy hoạt ảnh liên tục,
+    trên điện thoại yếu (CPU/GPU chậm) sẽ khiến trang tải/cuộn ì. Đã giảm bớt số lượng
+    xuống mức vừa phải (vẫn đẹp, vẫn có bầu trời sao + sao băng) để nhẹ máy hơn hẳn —
+    nếu máy vẫn yếu, có thể giảm thêm các số ở đây."""
 
     def _dots(n):
         return ", ".join(
@@ -424,9 +429,9 @@ def _make_starfield_html():
             for _ in range(n)
         )
 
-    stars_small, stars_medium, stars_large = _dots(150), _dots(60), _dots(25)
+    stars_small, stars_medium, stars_large = _dots(70), _dots(30), _dots(12)
 
-    SO_SAO_BANG = 60  # ~60 sao băng/phút — chỉnh số này để dày/thưa hơn
+    SO_SAO_BANG = 24  # số sao băng/phút — chỉnh số này để dày/thưa hơn (càng cao càng tốn máy)
     shooting_stars = "".join(
         '<div class="shooting-star" style="top:{top}vh; left:{left}vw; animation-delay:{delay}s;"></div>'.format(
             top=round(random.uniform(2, 55), 1),
@@ -653,7 +658,7 @@ if dark_mode:
         .starfield {{ position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }}
         .stars-small, .stars-medium, .stars-large {{
             position: absolute; top: 0; left: 0; width: 1px; height: 1px;
-            background: transparent; border-radius: 50%;
+            background: transparent; border-radius: 50%; will-change: opacity;
         }}
         .stars-small {{ box-shadow: {ST_SMALL}; animation: twinkle 3s ease-in-out infinite alternate; }}
         .stars-medium {{
@@ -670,12 +675,24 @@ if dark_mode:
             position: fixed; width: 140px; height: 2px; border-radius: 999px;
             background: linear-gradient(90deg, rgba(255,255,255,0.95), rgba(255,255,255,0));
             opacity: 0; transform: rotate(-35deg); animation: shoot 60s linear infinite;
+            will-change: opacity, transform;
         }}
         @keyframes shoot {{
             0%, 96% {{ opacity: 0; transform: translate(0, 0) rotate(-35deg); }}
             96.5% {{ opacity: 1; }}
             98.5% {{ opacity: 1; transform: translate(-340px, 240px) rotate(-35deg); }}
             100% {{ opacity: 0; transform: translate(-380px, 270px) rotate(-35deg); }}
+        }}
+        /* Máy/điện thoại yếu: bớt một nửa số sao băng đang chạy hoạt ảnh cùng lúc cho nhẹ máy
+           (nth-child ẩn hẳn — trình duyệt không phải vẽ/tính khung hình cho phần bị ẩn). */
+        @media (max-width: 640px) {{
+            .shooting-star:nth-child(n+17) {{ display: none; }}
+        }}
+        /* Ai bật "giảm chuyển động" trong máy (Reduce Motion / Giảm chuyển động) thì tắt hẳn
+           các hoạt ảnh trang trí này — vừa nhẹ máy vừa đúng ý người dùng. */
+        @media (prefers-reduced-motion: reduce) {{
+            .stars-small, .stars-medium, .stars-large, .shooting-star, .moon {{ animation: none !important; }}
+            .shooting-star {{ opacity: 0 !important; }}
         }}
 
         /* --- Mặt trăng: hình tròn vẽ bằng CSS (radial-gradient + vài "miệng hố" bằng
@@ -758,6 +775,9 @@ else:
         .cloud::before {{ width: 46px; height: 46px; top: -22px; left: 10px; }}
         .cloud::after {{ width: 36px; height: 36px; top: -15px; left: 44px; }}
         @keyframes troiMay {{ from {{ transform: translateX(-16px); }} to {{ transform: translateX(16px); }} }}
+        @media (prefers-reduced-motion: reduce) {{
+            .sun, .cloud {{ animation: none !important; }}
+        }}
     </style>
     <div class="daysky">
         <div class="sun"></div>
