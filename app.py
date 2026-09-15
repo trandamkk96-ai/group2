@@ -1,4 +1,3 @@
-import html
 import io
 from datetime import date, timedelta
 
@@ -29,7 +28,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("15/09/2026", "Thêm mã QR mở nhanh, Nhật ký hoạt động chung, Cộng đồng thảo luận, 3 tab Trang chủ / Cập nhật / Cộng đồng."),
+    ("15/09/2026", "Thêm mã QR mở nhanh, Nhật ký hoạt động chung, 2 tab Trang chủ / Cập nhật."),
     ("14/09/2026", "Thêm bộ lọc lịch sử theo ngày, biểu đồ xu hướng điểm, huy hiệu thành tích, xuất file PDF."),
     ("12/09/2026", "Thêm hộp góp ý (chỉ Admin đọc), avatar, bục podium top 3, tìm kiếm thành viên, hoàn tác."),
 ]
@@ -58,14 +57,6 @@ def init_db():
         """))
         s.execute(text("""
             CREATE TABLE IF NOT EXISTS feedback (
-                id SERIAL PRIMARY KEY,
-                nguoi_gui TEXT,
-                noi_dung TEXT NOT NULL,
-                ngay TIMESTAMP NOT NULL DEFAULT now()
-            )
-        """))
-        s.execute(text("""
-            CREATE TABLE IF NOT EXISTS discussions (
                 id SERIAL PRIMARY KEY,
                 nguoi_gui TEXT,
                 noi_dung TEXT NOT NULL,
@@ -344,30 +335,6 @@ def delete_feedback(feedback_id):
         s.commit()
 
 
-def add_discussion(nguoi_gui, noi_dung):
-    with conn.session as s:
-        s.execute(
-            text("INSERT INTO discussions (nguoi_gui, noi_dung) VALUES (:ng, :nd)"),
-            {"ng": nguoi_gui, "nd": noi_dung},
-        )
-        s.commit()
-
-
-def load_discussions(limit=50):
-    """Bảng thảo luận công khai — ai cũng xem được, khác với Hộp góp ý (chỉ Admin đọc)."""
-    return conn.query(
-        'SELECT id, nguoi_gui, noi_dung, ngay FROM discussions ORDER BY ngay DESC, id DESC LIMIT :lim',
-        params={"lim": limit},
-        ttl=0,
-    )
-
-
-def delete_discussion(discussion_id):
-    with conn.session as s:
-        s.execute(text("DELETE FROM discussions WHERE id = :id"), {"id": discussion_id})
-        s.commit()
-
-
 # ---------------------------------------------------------------
 # CSS — giao diện
 # ---------------------------------------------------------------
@@ -443,14 +410,6 @@ st.markdown("""
 
     div[data-testid="stExpander"] { border: none; border-radius: 14px; overflow: hidden; }
     button[kind="secondary"], button[kind="primary"] { border-radius: 10px !important; }
-
-    .msg-card {
-        background: #ffffff; border: 1px solid #eef0f3; border-radius: 14px;
-        padding: 12px 18px; margin-bottom: 8px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-    }
-    .msg-head { font-weight: 700; color: #111827; font-size: 0.95rem; }
-    .msg-time { font-weight: 400; color: #9ca3af; font-size: 0.78rem; margin-left: 6px; }
-    .msg-body { margin-top: 4px; color: #374151; white-space: pre-wrap; word-break: break-word; }
 
     button[data-baseweb="tab"] { font-weight: 700; font-size: 1.02rem; }
 </style>
@@ -553,7 +512,7 @@ else:
 # ---------------------------------------------------------------
 # 3 TAB CHÍNH: Trang chủ / Cập nhật / Cộng đồng
 # ---------------------------------------------------------------
-tab_home, tab_update, tab_community = st.tabs(["🏠 Trang chủ", "🆕 Cập nhật", "🗨️ Cộng đồng"])
+tab_home, tab_update = st.tabs(["🏠 Trang chủ", "🆕 Cập nhật"])
 
 # =================================================================
 # TAB 1 — TRANG CHỦ (toàn bộ nội dung cũ: điểm, xếp hạng, form, v.v.)
@@ -845,43 +804,3 @@ with tab_update:
     for ngay_cn, noi_dung_cn in UPDATES:
         st.markdown(f"**{ngay_cn}** — {noi_dung_cn}")
         st.markdown("---")
-
-
-# =================================================================
-# TAB 3 — CỘNG ĐỒNG (thảo luận công khai, ai cũng xem/đăng được)
-# =================================================================
-with tab_community:
-    st.subheader("🗨️ Cộng đồng thảo luận")
-    st.caption("Khu vực công khai — ai cũng xem được và đăng được.")
-
-    with st.form("form_thao_luan", clear_on_submit=True):
-        ten_tl = st.text_input("Tên bạn:", key="ten_thao_luan")
-        noi_dung_tl = st.text_area("Bạn muốn chia sẻ / thảo luận gì?", key="noi_dung_thao_luan")
-        gui_tl = st.form_submit_button("Đăng", use_container_width=True)
-        if gui_tl:
-            if noi_dung_tl.strip():
-                add_discussion(ten_tl.strip() or "Ẩn danh", noi_dung_tl.strip())
-                st.success("Đã đăng!")
-                st.rerun()
-            else:
-                st.error("Vui lòng nhập nội dung.")
-
-    discussions_df = load_discussions(limit=50)
-    if discussions_df.empty:
-        st.caption("Chưa có thảo luận nào — hãy là người đầu tiên!")
-    else:
-        for _, d in discussions_df.iterrows():
-            thoi_gian_tl = d["ngay"].strftime("%d/%m %H:%M") if pd.notna(d["ngay"]) else ""
-            nguoi_tl = html.escape(d["nguoi_gui"] or "Ẩn danh")
-            noi_dung_hien = html.escape(d["noi_dung"])
-            msg_html = (
-                f'<div class="msg-card">'
-                f'<div class="msg-head">{nguoi_tl}<span class="msg-time">— {thoi_gian_tl}</span></div>'
-                f'<div class="msg-body">{noi_dung_hien}</div>'
-                f'</div>'
-            )
-            st.markdown(msg_html, unsafe_allow_html=True)
-            if is_admin:
-                if st.button("🗑️ Xoá bài này", key=f"del_disc_{d['id']}"):
-                    delete_discussion(int(d["id"]))
-                    st.rerun()
