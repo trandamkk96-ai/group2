@@ -33,7 +33,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("16/09/2026", "☀️ Nhật thực (Chế độ sáng) giờ diễn ra mượt mà hơn: mặt trời mờ dần từ từ, tối hẳn một lúc, rồi sáng từ từ trở lại — thay vì đĩa che bật/tắt đột ngột như trước."),
+    ("16/09/2026", "☀️ Nhật thực giờ đúng kiểu thật hơn: mặt trời khuyết dần từ bên phải, che kín thì cả bầu trời tối sầm lại như Chế độ tối một lúc, rồi khuyết dần trả lại ánh sáng cũng bắt đầu từ bên phải luôn (không quay đầu lại, giống mặt trăng đi ngang qua một lượt)."),
     ("16/09/2026", "🌌 Dải Ngân Hà (Chế độ tối) giờ hiện nhiều ngày hơn: Thứ 6, Thứ 7, Chủ Nhật và Thứ 2 — thay vì chỉ mỗi Thứ 2 như trước."),
     ("16/09/2026", "🔧 Sửa lỗi hiện chữ/code rối mắt phía trên thanh tab (do phần code vẽ dải Ngân Hà gây ra) — cảm ơn mọi người đã báo lỗi, giờ web hiện bình thường lại rồi."),
     ("16/09/2026", "🌌 Mỗi ngày trong tuần Chế độ tối có 1 hiện tượng thiên văn riêng: Thứ 2 là dải Ngân Hà sáng rực cả vùng trời, Thứ 4/6/CN là sao chổi (đầu sáng + đuôi dài ánh xanh, bay chậm và hiếm hơn), các ngày còn lại vẫn là sao băng như cũ. Chế độ sáng thì thêm nhật thực: cứ 5 phút web mở là có 3 phút mặt trăng che mặt trời rồi lại sáng ra, lặp lại đều đặn — tất cả đều vẽ bằng CSS thuần, không cần JavaScript nên điện thoại yếu vẫn chạy mượt."),
@@ -1241,18 +1241,26 @@ else:
         .daysky {{ position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }}
 
         /* --- Mặt trời: hình tròn vẽ bằng CSS, ánh sáng ấm, quầng sáng nhấp nháy nhẹ.
-           Mờ bớt khi trời nhiều mây/mưa (opacity), không ẩn hẳn để tránh đổi cảnh đột ngột. --- */
-        .sun {{
+           Mờ bớt khi trời nhiều mây/mưa (opacity), không ẩn hẳn để tránh đổi cảnh đột ngột.
+           .sun-wrap bo tròn + overflow:hidden để "cắt gọn" đĩa che nhật thực bên trong (xem
+           phần Nhật thực bên dưới) — quầng sáng phải dùng filter: drop-shadow (thay vì
+           box-shadow) vì box-shadow sẽ bị overflow:hidden của chính nó cắt mất, drop-shadow thì
+           không bị cắt nên quầng sáng vẫn hiện ra ngoài viền tròn bình thường. --- */
+        .sun-wrap {{
             position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
-            border-radius: 50%; opacity: {DO_SANG_MAT_TROI};
-            background: radial-gradient(circle at 35% 32%, #fffdf2 0%, #ffe89b 40%, #ffc857 75%, #ffb347 100%);
+            border-radius: 50%; overflow: hidden; opacity: {DO_SANG_MAT_TROI};
+            filter: drop-shadow(0 0 45px rgba(255, 200, 87, 0.45)) drop-shadow(0 0 90px rgba(255, 200, 87, 0.18));
             animation: sunGlow 5s ease-in-out infinite, sangToiNhatThuc 300s linear infinite;
         }}
-        @keyframes sunGlow {{
-            0%, 100% {{ box-shadow: 0 0 45px 14px rgba(255, 200, 87, 0.45), 0 0 90px 38px rgba(255, 200, 87, 0.18); }}
-            50% {{ box-shadow: 0 0 58px 18px rgba(255, 200, 87, 0.6), 0 0 110px 46px rgba(255, 200, 87, 0.28); }}
+        .sun {{
+            position: absolute; inset: 0; border-radius: 50%;
+            background: radial-gradient(circle at 35% 32%, #fffdf2 0%, #ffe89b 40%, #ffc857 75%, #ffb347 100%);
         }}
-        /* Ánh sáng mặt trời mờ dần khi nhật thực tới gần, tối hẳn lúc bị che hết, rồi sáng
+        @keyframes sunGlow {{
+            0%, 100% {{ filter: drop-shadow(0 0 45px rgba(255, 200, 87, 0.45)) drop-shadow(0 0 90px rgba(255, 200, 87, 0.18)); }}
+            50% {{ filter: drop-shadow(0 0 58px rgba(255, 200, 87, 0.6)) drop-shadow(0 0 110px rgba(255, 200, 87, 0.28)); }}
+        }}
+        /* Ánh sáng + quầng sáng mờ dần khi nhật thực tới gần, tối hẳn lúc bị che hết, rồi sáng
            từ từ trở lại — chạy chung nhịp 300s với đĩa che (.nhat-thuc) bên dưới nên luôn khớp
            nhau: mờ dần 18s, tối hẳn ~144s, sáng lại dần 18s, rồi sáng bình thường ~120s. */
         @keyframes sangToiNhatThuc {{
@@ -1261,7 +1269,7 @@ else:
             100% {{ opacity: {DO_SANG_MAT_TROI}; }}
         }}
         @media (max-width: 640px) {{
-            .sun {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
+            .sun-wrap {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
         }}
 
         /* --- Mây trôi: 1 khối bo tròn + 2 "cục bông" (::before/::after) ghép lại. Màu mây
@@ -1280,38 +1288,58 @@ else:
         .cloud::after {{ width: 36px; height: 36px; top: -15px; left: 44px; }}
         @keyframes troiMay {{ from {{ transform: translateX(-16px); }} to {{ transform: translateX(16px); }} }}
         @media (prefers-reduced-motion: reduce) {{
-            .sun, .cloud {{ animation: none !important; }}
+            .sun-wrap, .cloud {{ animation: none !important; }}
         }}
 
         /* --- Nhật thực: cứ mỗi 5 phút thì có 3 phút mặt trăng che mặt trời (300s/chu kỳ,
-           lặp vô tận, thuần CSS không cần JavaScript/hẹn giờ gì cả). Đĩa tối trượt ngang TỪ TỪ
-           (18 giây) vào che đúng vị trí mặt trời — khớp nhịp với mặt trời mờ dần ở trên — giữ
-           che kín một lúc rồi trượt ra TỪ TỪ (18 giây) trả lại ánh sáng, có viền sáng nhẹ quanh
-           mép kiểu "vành nhật hoa". Bộ đếm chạy riêng từ lúc mở trang, không đồng bộ giờ thực
-           giữa mọi người xem — chỉ là hiệu ứng trang trí cho vui. --- */
+           lặp vô tận, thuần CSS không cần JavaScript/hẹn giờ gì cả). Đĩa tối là CON của
+           .sun-wrap (cùng khung tròn với mặt trời) rồi trượt ngang TỪ TỪ (18 giây) từ mép phải
+           vào — nhờ .sun-wrap có overflow:hidden nên phần đĩa trượt ra ngoài khung tròn bị CẮT
+           ẨN hết, chỉ phần đè lên đúng mặt trời mới hiện ra → che dần từng miếng "khuyết" y như
+           nhật thực thật. Trượt CÙNG MỘT CHIỀU từ đầu tới cuối (phải → trái) chứ không lùi lại
+           giữa chừng: che kín xong đi tiếp luôn nên lúc "nhả" ra ánh sáng cũng hiện lại bắt đầu
+           từ bên phải giống hệt lúc che vào — y như mặt trăng thật đi ngang qua một lượt, không
+           quay đầu. Giữ che kín một lúc rồi đi tiếp TỪ TỪ (18 giây) trả lại ánh sáng. Bộ đếm chạy
+           riêng từ lúc mở trang, không đồng bộ giờ thực giữa mọi người xem — chỉ là hiệu ứng
+           trang trí cho vui. --- */
         .nhat-thuc {{
-            position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
-            border-radius: 50%; background: #1e293b;
-            box-shadow: 0 0 0 4px rgba(255, 200, 87, 0.55), 0 0 26px 8px rgba(255, 200, 87, 0.3);
+            position: absolute; inset: 0; background: #1e293b;
             animation: nhat-thuc 300s linear infinite;
             will-change: transform;
         }}
         @keyframes nhat-thuc {{
-            0%, 40% {{ transform: translateX(130%); }}
+            0%, 40% {{ transform: translateX(100%); }}
             46%, 94% {{ transform: translateX(0%); }}
-            100% {{ transform: translateX(130%); }}
-        }}
-        @media (max-width: 640px) {{
-            .nhat-thuc {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
+            100% {{ transform: translateX(-100%); }}
         }}
         @media (prefers-reduced-motion: reduce) {{
-            .nhat-thuc {{ animation: none !important; transform: translateX(130%); }}
+            .nhat-thuc {{ animation: none !important; transform: translateX(100%); }}
+        }}
+
+        /* --- Lúc nhật thực che kín thì cả bầu trời tối sầm lại như Chế độ tối (không có sao,
+           chỉ tối nền thôi) rồi từ từ sáng trở lại — 1 lớp phủ đen mờ dần/hiện dần toàn màn
+           hình, canh đúng nhịp với đĩa che ở trên nên luôn khớp nhau. Chỉ dùng opacity nên rất
+           nhẹ, điện thoại yếu vẫn chạy mượt. --- */
+        .nhat-thuc-toi-troi {{
+            position: fixed; inset: 0; background: #0f172a; opacity: 0;
+            pointer-events: none; animation: nenToiNhatThuc 300s linear infinite;
+        }}
+        @keyframes nenToiNhatThuc {{
+            0%, 40% {{ opacity: 0; }}
+            46%, 94% {{ opacity: 0.94; }}
+            100% {{ opacity: 0; }}
+        }}
+        @media (prefers-reduced-motion: reduce) {{
+            .nhat-thuc-toi-troi {{ animation: none !important; opacity: 0; }}
         }}
     </style>
     <div class="daysky">
-        <div class="sun"></div>
-        <div class="nhat-thuc"></div>
+        <div class="sun-wrap">
+            <div class="sun"></div>
+            <div class="nhat-thuc"></div>
+        </div>
         {CLOUDS_HTML}
+        <div class="nhat-thuc-toi-troi"></div>
     </div>
     """, unsafe_allow_html=True)
 
