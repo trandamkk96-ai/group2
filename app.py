@@ -33,7 +33,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("16/09/2026", "☀️ Nhật thực giờ đúng kiểu thật hơn: mặt trời khuyết dần từ bên phải, che kín thì cả bầu trời tối sầm lại như Chế độ tối một lúc, rồi khuyết dần trả lại ánh sáng cũng bắt đầu từ bên phải luôn (không quay đầu lại, giống mặt trăng đi ngang qua một lượt)."),
+    ("16/09/2026", "☀️ Nhật thực giờ đúng kiểu thật hơn: đĩa che tròn y hệt mặt trăng (không còn cạnh thẳng), khuyết dần từ bên phải, che kín thì có vành sáng vàng mảnh nổi lên quanh mép (vành nhật hoa) và cả bầu trời tối sầm lại như Chế độ tối một lúc, rồi khuyết dần trả lại ánh sáng cũng từ bên phải luôn (không quay đầu lại, giống mặt trăng đi ngang qua một lượt)."),
     ("16/09/2026", "🌌 Dải Ngân Hà (Chế độ tối) giờ hiện nhiều ngày hơn: Thứ 6, Thứ 7, Chủ Nhật và Thứ 2 — thay vì chỉ mỗi Thứ 2 như trước."),
     ("16/09/2026", "🔧 Sửa lỗi hiện chữ/code rối mắt phía trên thanh tab (do phần code vẽ dải Ngân Hà gây ra) — cảm ơn mọi người đã báo lỗi, giờ web hiện bình thường lại rồi."),
     ("16/09/2026", "🌌 Mỗi ngày trong tuần Chế độ tối có 1 hiện tượng thiên văn riêng: Thứ 2 là dải Ngân Hà sáng rực cả vùng trời, Thứ 4/6/CN là sao chổi (đầu sáng + đuôi dài ánh xanh, bay chậm và hiếm hơn), các ngày còn lại vẫn là sao băng như cũ. Chế độ sáng thì thêm nhật thực: cứ 5 phút web mở là có 3 phút mặt trăng che mặt trời rồi lại sáng ra, lặp lại đều đặn — tất cả đều vẽ bằng CSS thuần, không cần JavaScript nên điện thoại yếu vẫn chạy mượt."),
@@ -1303,7 +1303,7 @@ else:
            riêng từ lúc mở trang, không đồng bộ giờ thực giữa mọi người xem — chỉ là hiệu ứng
            trang trí cho vui. --- */
         .nhat-thuc {{
-            position: absolute; inset: 0; background: #1e293b;
+            position: absolute; inset: 0; border-radius: 50%; background: #1e293b;
             animation: nhat-thuc 300s linear infinite;
             will-change: transform;
         }}
@@ -1314,6 +1314,27 @@ else:
         }}
         @media (prefers-reduced-motion: reduce) {{
             .nhat-thuc {{ animation: none !important; transform: translateX(100%); }}
+        }}
+
+        /* --- Vành nhật hoa: viền sáng vàng mảnh quanh mép hình tròn, mờ hẳn lúc bình thường,
+           SÁNG RÕ lên đúng lúc mặt trời bị che kín hoàn toàn (tách riêng khỏi .sun-wrap nên
+           không bị mờ dần theo — nhờ vậy nó "nổi bật" lên giữa lúc tối nhất, giống hiệu ứng
+           "vành nhật hoa"/"diamond ring" của nhật thực thật). --- */
+        .nhat-thuc-vanh-sang {{
+            position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
+            border-radius: 50%; pointer-events: none;
+            animation: vanhSangNhatThuc 300s linear infinite;
+        }}
+        @keyframes vanhSangNhatThuc {{
+            0%, 40% {{ box-shadow: inset 0 0 0 2px rgba(255, 221, 156, 0); }}
+            46%, 94% {{ box-shadow: inset 0 0 0 3px rgba(255, 224, 160, 0.95), 0 0 16px 3px rgba(255, 224, 160, 0.6); }}
+            100% {{ box-shadow: inset 0 0 0 2px rgba(255, 221, 156, 0); }}
+        }}
+        @media (max-width: 640px) {{
+            .nhat-thuc-vanh-sang {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
+        }}
+        @media (prefers-reduced-motion: reduce) {{
+            .nhat-thuc-vanh-sang {{ animation: none !important; box-shadow: none; }}
         }}
 
         /* --- Lúc nhật thực che kín thì cả bầu trời tối sầm lại như Chế độ tối (không có sao,
@@ -1340,6 +1361,7 @@ else:
         </div>
         {CLOUDS_HTML}
         <div class="nhat-thuc-toi-troi"></div>
+        <div class="nhat-thuc-vanh-sang"></div>
     </div>
     """, unsafe_allow_html=True)
 
