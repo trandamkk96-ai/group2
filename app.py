@@ -31,6 +31,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("16/09/2026", "🗣️ Admin giờ trả lời góp ý công khai được rồi: vào Hộp góp ý ở thanh bên → gõ câu trả lời ngay dưới góp ý đó → Lưu. Câu trả lời hiện ngay ở tab Góp ý cho mọi người xem (mục \"Admin đã trả lời\"), nhưng KHÔNG hiện tên người đã gửi góp ý — vẫn giữ ẩn danh như trước."),
     ("16/09/2026", "🎨 Làm đẹp lại giao diện bảng xếp hạng/thẻ thành viên: đổi font chữ mới (Be Vietnam Pro, rõ dấu tiếng Việt hơn), thẻ xếp hạng có viền màu riêng theo từng người, số hạng đổi thành khung tròn, điểm số có mũi tên ▲▼ tăng/giảm, bục top 3 có ánh sáng lướt nhẹ ở hạng Nhất, thẻ hiện lần lượt mượt mà khi tải trang, nút bấm/tab có hiệu ứng nhấn nhẹ khi rê chuột."),
     ("16/09/2026", "⏳ Thêm mục \"Đếm ngược lịch thi/kiểm tra\" ngay trong tab Thời khóa biểu — Admin bấm \"➕ Thêm lịch thi\", gõ tên bài thi + chọn ngày là xong, không cần vào GitHub. Web tự đếm ngược \"Còn X ngày nữa\" cho mọi người xem, đến sát ngày thì đổi thành \"Ngày mai!\" rồi \"🔥 Hôm nay!\" cho dễ chú ý, bài thi nào qua ngày rồi thì tự động biến mất khỏi danh sách. Lịch thi gần nhất còn hiện ngay banner trên Trang chủ luôn, khỏi cần bấm vào tab mới thấy."),
     ("15/09/2026", "📅 Banner \"Hôm nay học gì\" trên Trang chủ giờ thông minh hơn: sau 11h45 sáng (buổi học đã xong) tự động chuyển sang hiện lịch của NGÀY MAI luôn, để chuẩn bị trước cho hôm sau thay vì cứ hiện lịch hôm nay đã học xong."),
@@ -72,6 +73,10 @@ def init_db():
                 ngay TIMESTAMP NOT NULL DEFAULT now()
             )
         """))
+        # Thêm cột trả lời công khai vào bảng feedback đã có sẵn (ALTER an toàn — không mất
+        # dữ liệu góp ý cũ, chỉ thêm cột mới nếu chưa có).
+        s.execute(text("ALTER TABLE feedback ADD COLUMN IF NOT EXISTS phan_hoi TEXT"))
+        s.execute(text("ALTER TABLE feedback ADD COLUMN IF NOT EXISTS ngay_phan_hoi TIMESTAMP"))
         s.execute(text("""
             CREATE TABLE IF NOT EXISTS news (
                 id SERIAL PRIMARY KEY,
@@ -382,14 +387,38 @@ def add_feedback(nguoi_gui, noi_dung):
 
 
 def load_feedback():
-    """Chỉ Admin gọi hàm này để đọc góp ý — không hiển thị công khai ở đâu khác."""
-    return conn.query('SELECT id, nguoi_gui, noi_dung, ngay FROM feedback ORDER BY ngay DESC', ttl=0)
+    """Chỉ Admin gọi hàm này để đọc góp ý (kèm cả trả lời nếu có) — tên người gửi không
+    hiển thị công khai ở đâu khác."""
+    return conn.query(
+        'SELECT id, nguoi_gui, noi_dung, ngay, phan_hoi, ngay_phan_hoi FROM feedback ORDER BY ngay DESC', ttl=0,
+    )
 
 
 def delete_feedback(feedback_id):
     with conn.session as s:
         s.execute(text("DELETE FROM feedback WHERE id = :id"), {"id": feedback_id})
         s.commit()
+
+
+def luu_phan_hoi_feedback(feedback_id, phan_hoi):
+    """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi). Lưu/ghi đè câu trả lời
+    công khai cho 1 góp ý — không lưu tên người gửi kèm câu trả lời để giữ ẩn danh."""
+    with conn.session as s:
+        s.execute(
+            text("UPDATE feedback SET phan_hoi = :ph, ngay_phan_hoi = now() WHERE id = :id"),
+            {"ph": phan_hoi or None, "id": feedback_id},
+        )
+        s.commit()
+
+
+def load_feedback_da_tra_loi():
+    """Các góp ý ĐÃ có Admin trả lời — hiện công khai cho mọi người xem, KHÔNG kèm tên
+    người gửi để giữ ẩn danh. Trả lời mới nhất lên đầu."""
+    return conn.query(
+        "SELECT id, noi_dung, phan_hoi, ngay_phan_hoi FROM feedback "
+        "WHERE phan_hoi IS NOT NULL AND phan_hoi != '' ORDER BY ngay_phan_hoi DESC",
+        ttl=0,
+    )
 
 
 def add_news(noi_dung):
@@ -760,6 +789,24 @@ st.markdown(f"""
     }}
     .news-item-date {{ font-weight: 700; color: {C_MUTED}; font-size: 0.78rem; }}
     .news-item-text {{ color: {C_TEXT}; font-size: 0.95rem; margin-top: 3px; line-height: 1.5; white-space: pre-wrap; }}
+
+    /* --- Góp ý đã được Admin trả lời công khai (ẩn danh người gửi) --- */
+    .qa-tieu-de {{
+        font-weight: 800; color: {C_TEXT}; font-size: 1rem; margin: 26px 0 12px 0;
+    }}
+    .qa-the {{
+        background: {C_CARD}; border: 1px solid {C_BORDER}; border-left: 4px solid #10b981;
+        border-radius: 12px; padding: 14px 18px; margin-bottom: 12px;
+        animation: fadeInUp 0.4s ease both;
+    }}
+    .qa-cauhoi {{ color: {C_TEXT}; font-size: 0.92rem; line-height: 1.5; white-space: pre-wrap; }}
+    .qa-cauhoi-nhan {{ font-weight: 800; color: {C_MUTED}; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }}
+    .qa-tra-loi-wrap {{
+        margin-top: 10px; padding: 10px 14px; border-radius: 10px;
+        background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(14, 165, 233, 0.1));
+    }}
+    .qa-tra-loi-nhan {{ font-weight: 800; color: #0ea5e9; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }}
+    .qa-tra-loi {{ color: {C_TEXT}; font-size: 0.92rem; margin-top: 3px; line-height: 1.5; white-space: pre-wrap; }}
 
     div[data-testid="stMetric"] {{
         background: {C_CARD}; border: 1px solid {C_BORDER}; border-radius: 14px;
@@ -1152,17 +1199,35 @@ if is_admin:
     st.sidebar.markdown("---")
     feedback_df = load_feedback()
     st.sidebar.subheader(f"📬 Hộp góp ý ({len(feedback_df)})")
+    st.sidebar.caption(
+        "Gõ câu trả lời rồi bấm Lưu — câu trả lời sẽ hiện CÔNG KHAI ở tab Góp ý cho mọi người "
+        "xem, nhưng KHÔNG hiện tên người gửi góp ý (giữ ẩn danh). Để trống + Lưu để gỡ câu trả lời."
+    )
     if feedback_df.empty:
         st.sidebar.caption("Chưa có góp ý nào.")
     else:
         for _, fb in feedback_df.iterrows():
             thoi_gian = fb["ngay"].strftime("%d/%m %H:%M") if pd.notna(fb["ngay"]) else ""
             nguoi = fb["nguoi_gui"] or "Ẩn danh"
-            with st.sidebar.expander(f"{nguoi} — {thoi_gian}"):
+            da_tra_loi = bool(fb["phan_hoi"] and str(fb["phan_hoi"]).strip())
+            nhan_da_tra_loi = " ✅" if da_tra_loi else ""
+            with st.sidebar.expander(f"{nguoi} — {thoi_gian}{nhan_da_tra_loi}"):
                 st.write(fb["noi_dung"])
-                if st.button("🗑️ Xoá góp ý này", key=f"del_fb_{fb['id']}", use_container_width=True):
-                    delete_feedback(int(fb["id"]))
-                    st.rerun()
+                phan_hoi_moi = st.text_area(
+                    "Trả lời công khai (không bắt buộc):",
+                    value=fb["phan_hoi"] or "",
+                    key=f"phan_hoi_{fb['id']}",
+                )
+                cot_luu, cot_xoa = st.columns(2)
+                with cot_luu:
+                    if st.button("💾 Lưu trả lời", key=f"luu_ph_{fb['id']}", use_container_width=True):
+                        luu_phan_hoi_feedback(int(fb["id"]), phan_hoi_moi.strip())
+                        st.success("Đã lưu!")
+                        st.rerun()
+                with cot_xoa:
+                    if st.button("🗑️ Xoá góp ý này", key=f"del_fb_{fb['id']}", use_container_width=True):
+                        delete_feedback(int(fb["id"]))
+                        st.rerun()
 else:
     if password:
         st.sidebar.error("Mật khẩu chưa đúng")
@@ -1723,7 +1788,7 @@ with tab_feedback:
     st.markdown(
         '<div class="tab-hero feedback">'
         '<div class="tab-hero-title">💬 Góp ý cho nhóm</div>'
-        '<div class="tab-hero-subtitle">Góp ý của bạn chỉ Admin đọc được, không hiển thị công khai cho người khác xem</div>'
+        '<div class="tab-hero-subtitle">Chỉ Admin đọc được góp ý của bạn. Nếu Admin trả lời, câu trả lời sẽ hiện công khai bên dưới — nhưng KHÔNG kèm tên người gửi</div>'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -1737,3 +1802,21 @@ with tab_feedback:
                 st.success("Cảm ơn bạn đã góp ý!")
             else:
                 st.error("Vui lòng nhập nội dung góp ý.")
+
+    # --- Các góp ý Admin đã trả lời — hiện công khai cho mọi người xem, KHÔNG hiện tên
+    # người gửi (giữ ẩn danh dù lúc gửi có ghi tên hay không). ---
+    da_tra_loi_df = load_feedback_da_tra_loi()
+    if not da_tra_loi_df.empty:
+        st.markdown('<div class="qa-tieu-de">🗣️ Admin đã trả lời</div>', unsafe_allow_html=True)
+        for _, qa in da_tra_loi_df.iterrows():
+            st.markdown(
+                '<div class="qa-the">'
+                '<div class="qa-cauhoi-nhan">💬 Góp ý</div>'
+                f'<div class="qa-cauhoi">{html.escape(qa["noi_dung"])}</div>'
+                '<div class="qa-tra-loi-wrap">'
+                '<div class="qa-tra-loi-nhan">✅ Admin trả lời</div>'
+                f'<div class="qa-tra-loi">{html.escape(qa["phan_hoi"])}</div>'
+                '</div>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
