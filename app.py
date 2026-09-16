@@ -33,6 +33,8 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("16/09/2026", "☀️ Nhật thực (Chế độ sáng) giờ diễn ra mượt mà hơn: mặt trời mờ dần từ từ, tối hẳn một lúc, rồi sáng từ từ trở lại — thay vì đĩa che bật/tắt đột ngột như trước."),
+    ("16/09/2026", "🌌 Dải Ngân Hà (Chế độ tối) giờ hiện nhiều ngày hơn: Thứ 6, Thứ 7, Chủ Nhật và Thứ 2 — thay vì chỉ mỗi Thứ 2 như trước."),
     ("16/09/2026", "🔧 Sửa lỗi hiện chữ/code rối mắt phía trên thanh tab (do phần code vẽ dải Ngân Hà gây ra) — cảm ơn mọi người đã báo lỗi, giờ web hiện bình thường lại rồi."),
     ("16/09/2026", "🌌 Mỗi ngày trong tuần Chế độ tối có 1 hiện tượng thiên văn riêng: Thứ 2 là dải Ngân Hà sáng rực cả vùng trời, Thứ 4/6/CN là sao chổi (đầu sáng + đuôi dài ánh xanh, bay chậm và hiếm hơn), các ngày còn lại vẫn là sao băng như cũ. Chế độ sáng thì thêm nhật thực: cứ 5 phút web mở là có 3 phút mặt trăng che mặt trời rồi lại sáng ra, lặp lại đều đặn — tất cả đều vẽ bằng CSS thuần, không cần JavaScript nên điện thoại yếu vẫn chạy mượt."),
     ("16/09/2026", "🌙 Mặt trăng (Chế độ tối) giờ đổi hình dạng dần mỗi ngày theo đúng chu kỳ trăng thật (~29,5 ngày) thay vì luôn tròn y hệt. Mây/nắng/mưa (cả 2 chế độ) giờ cập nhật theo thời tiết THẬT ở Mỹ Tho, Tiền Giang (lấy miễn phí từ Open-Meteo, 30 phút mới gọi lại 1 lần nên không ảnh hưởng tốc độ): trời quang thì như cũ, nhiều mây thì mây dày/xám hơn và mặt trời/bầu trời sao mờ bớt, có mưa thì thêm hiệu ứng mưa rơi nhẹ nhàng bằng CSS (không dùng JavaScript nên điện thoại yếu vẫn mượt). Lỡ không lấy được thời tiết thì web tự quay về mây ngẫu nhiên như bản cũ, không lỗi gì cả."),
@@ -661,9 +663,9 @@ _TEN_HIEN_TUONG_THEO_THU = {
     1: "sao_bang",  # Thứ 3
     2: "sao_choi",  # Thứ 4
     3: "sao_bang",  # Thứ 5
-    4: "sao_choi",  # Thứ 6
-    5: "sao_bang",  # Thứ 7
-    6: "sao_choi",  # CN
+    4: "ngan_ha",   # Thứ 6 — dải Ngân Hà sáng rực cả vùng trời
+    5: "ngan_ha",   # Thứ 7 — dải Ngân Hà sáng rực cả vùng trời
+    6: "ngan_ha",   # CN — dải Ngân Hà sáng rực cả vùng trời
 }
 
 
@@ -1244,11 +1246,19 @@ else:
             position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
             border-radius: 50%; opacity: {DO_SANG_MAT_TROI};
             background: radial-gradient(circle at 35% 32%, #fffdf2 0%, #ffe89b 40%, #ffc857 75%, #ffb347 100%);
-            animation: sunGlow 5s ease-in-out infinite;
+            animation: sunGlow 5s ease-in-out infinite, sangToiNhatThuc 300s linear infinite;
         }}
         @keyframes sunGlow {{
             0%, 100% {{ box-shadow: 0 0 45px 14px rgba(255, 200, 87, 0.45), 0 0 90px 38px rgba(255, 200, 87, 0.18); }}
             50% {{ box-shadow: 0 0 58px 18px rgba(255, 200, 87, 0.6), 0 0 110px 46px rgba(255, 200, 87, 0.28); }}
+        }}
+        /* Ánh sáng mặt trời mờ dần khi nhật thực tới gần, tối hẳn lúc bị che hết, rồi sáng
+           từ từ trở lại — chạy chung nhịp 300s với đĩa che (.nhat-thuc) bên dưới nên luôn khớp
+           nhau: mờ dần 18s, tối hẳn ~144s, sáng lại dần 18s, rồi sáng bình thường ~120s. */
+        @keyframes sangToiNhatThuc {{
+            0%, 40% {{ opacity: {DO_SANG_MAT_TROI}; }}
+            46%, 94% {{ opacity: 0.04; }}
+            100% {{ opacity: {DO_SANG_MAT_TROI}; }}
         }}
         @media (max-width: 640px) {{
             .sun {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
@@ -1274,10 +1284,11 @@ else:
         }}
 
         /* --- Nhật thực: cứ mỗi 5 phút thì có 3 phút mặt trăng che mặt trời (300s/chu kỳ,
-           lặp vô tận, thuần CSS không cần JavaScript/hẹn giờ gì cả). Đĩa tối trượt ngang vào
-           che đúng vị trí mặt trời, có viền sáng nhẹ quanh mép kiểu "vành nhật hoa". Bộ đếm
-           chạy riêng từ lúc mở trang, không đồng bộ giờ thực giữa mọi người xem — chỉ là hiệu
-           ứng trang trí cho vui. --- */
+           lặp vô tận, thuần CSS không cần JavaScript/hẹn giờ gì cả). Đĩa tối trượt ngang TỪ TỪ
+           (18 giây) vào che đúng vị trí mặt trời — khớp nhịp với mặt trời mờ dần ở trên — giữ
+           che kín một lúc rồi trượt ra TỪ TỪ (18 giây) trả lại ánh sáng, có viền sáng nhẹ quanh
+           mép kiểu "vành nhật hoa". Bộ đếm chạy riêng từ lúc mở trang, không đồng bộ giờ thực
+           giữa mọi người xem — chỉ là hiệu ứng trang trí cho vui. --- */
         .nhat-thuc {{
             position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
             border-radius: 50%; background: #1e293b;
@@ -1286,8 +1297,8 @@ else:
             will-change: transform;
         }}
         @keyframes nhat-thuc {{
-            0%, 38% {{ transform: translateX(130%); }}
-            40%, 98% {{ transform: translateX(0%); }}
+            0%, 40% {{ transform: translateX(130%); }}
+            46%, 94% {{ transform: translateX(0%); }}
             100% {{ transform: translateX(130%); }}
         }}
         @media (max-width: 640px) {{
