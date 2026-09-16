@@ -33,6 +33,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("16/09/2026", "🌌 Mỗi ngày trong tuần Chế độ tối có 1 hiện tượng thiên văn riêng: Thứ 2 là dải Ngân Hà sáng rực cả vùng trời, Thứ 4/6/CN là sao chổi (đầu sáng + đuôi dài ánh xanh, bay chậm và hiếm hơn), các ngày còn lại vẫn là sao băng như cũ. Chế độ sáng thì thêm nhật thực: cứ 5 phút web mở là có 3 phút mặt trăng che mặt trời rồi lại sáng ra, lặp lại đều đặn — tất cả đều vẽ bằng CSS thuần, không cần JavaScript nên điện thoại yếu vẫn chạy mượt."),
     ("16/09/2026", "🌙 Mặt trăng (Chế độ tối) giờ đổi hình dạng dần mỗi ngày theo đúng chu kỳ trăng thật (~29,5 ngày) thay vì luôn tròn y hệt. Mây/nắng/mưa (cả 2 chế độ) giờ cập nhật theo thời tiết THẬT ở Mỹ Tho, Tiền Giang (lấy miễn phí từ Open-Meteo, 30 phút mới gọi lại 1 lần nên không ảnh hưởng tốc độ): trời quang thì như cũ, nhiều mây thì mây dày/xám hơn và mặt trời/bầu trời sao mờ bớt, có mưa thì thêm hiệu ứng mưa rơi nhẹ nhàng bằng CSS (không dùng JavaScript nên điện thoại yếu vẫn mượt). Lỡ không lấy được thời tiết thì web tự quay về mây ngẫu nhiên như bản cũ, không lỗi gì cả."),
     ("16/09/2026", "🗣️ Admin giờ trả lời góp ý công khai được rồi: vào Hộp góp ý ở thanh bên → gõ câu trả lời ngay dưới góp ý đó → Lưu. Câu trả lời hiện ngay ở tab Góp ý cho mọi người xem (mục \"Admin đã trả lời\"), nhưng KHÔNG hiện tên người đã gửi góp ý — vẫn giữ ẩn danh như trước."),
     ("16/09/2026", "🎨 Làm đẹp lại giao diện bảng xếp hạng/thẻ thành viên: đổi font chữ mới (Be Vietnam Pro, rõ dấu tiếng Việt hơn), thẻ xếp hạng có viền màu riêng theo từng người, số hạng đổi thành khung tròn, điểm số có mũi tên ▲▼ tăng/giảm, bục top 3 có ánh sáng lướt nhẹ ở hạng Nhất, thẻ hiện lần lượt mượt mà khi tải trang, nút bấm/tab có hiệu ứng nhấn nhẹ khi rê chuột."),
@@ -654,13 +655,32 @@ def pha_mat_trang(ngay):
     return (so_ngay % chu_ky) / chu_ky
 
 
-def _make_starfield_html():
+_TEN_HIEN_TUONG_THEO_THU = {
+    0: "ngan_ha",   # Thứ 2 — dải Ngân Hà sáng rực cả vùng trời
+    1: "sao_bang",  # Thứ 3
+    2: "sao_choi",  # Thứ 4
+    3: "sao_bang",  # Thứ 5
+    4: "sao_choi",  # Thứ 6
+    5: "sao_bang",  # Thứ 7
+    6: "sao_choi",  # CN
+}
+
+
+def hien_tuong_thien_van_hom_nay():
+    """Mỗi ngày trong tuần có 1 hiện tượng thiên văn riêng cho Chế độ tối — đổi đều đặn
+    theo thứ trong tuần (giờ Hà Nội), ai mở web cùng ngày cũng thấy giống nhau:
+    Thứ 2 = dải Ngân Hà, các ngày còn lại xen kẽ sao băng / sao chổi."""
+    return _TEN_HIEN_TUONG_THEO_THU[datetime.now(GIO_HA_NOI).weekday()]
+
+
+def _make_starfield_html(hien_tuong):
     """Tạo nền bầu trời sao cho Chế độ tối: các chấm sao lấp lánh (kỹ thuật box-shadow,
-    không cần JavaScript) + sao băng bay ngang qua màn hình.
+    không cần JavaScript) + hiện tượng thiên văn riêng của ngày hôm đó (sao băng / sao chổi
+    — dải Ngân Hà thì vẽ riêng bằng CSS, không cần HTML sinh ra ở đây).
 
     LƯU Ý HIỆU NĂNG: bản trước dùng 235 chấm sao + 60 sao băng chạy hoạt ảnh liên tục,
     trên điện thoại yếu (CPU/GPU chậm) sẽ khiến trang tải/cuộn ì. Đã giảm bớt số lượng
-    xuống mức vừa phải (vẫn đẹp, vẫn có bầu trời sao + sao băng) để nhẹ máy hơn hẳn —
+    xuống mức vừa phải (vẫn đẹp, vẫn có bầu trời sao + hiệu ứng bay) để nhẹ máy hơn hẳn —
     nếu máy vẫn yếu, có thể giảm thêm các số ở đây."""
 
     def _dots(n):
@@ -671,20 +691,37 @@ def _make_starfield_html():
 
     stars_small, stars_medium, stars_large = _dots(70), _dots(30), _dots(12)
 
-    SO_SAO_BANG = 24  # số sao băng/phút — chỉnh số này để dày/thưa hơn (càng cao càng tốn máy)
-    shooting_stars = "".join(
-        '<div class="shooting-star" style="top:{top}vh; left:{left}vw; animation-delay:{delay}s;"></div>'.format(
-            top=round(random.uniform(2, 55), 1),
-            left=round(random.uniform(15, 95), 1),
-            delay=round(i * (60 / SO_SAO_BANG), 2),
+    if hien_tuong == "sao_choi":
+        # Sao chổi: hiếm hơn sao băng hẳn (chỉ vài lần/phút), bay chậm và "nặng ký" hơn,
+        # có đầu sáng rực + đuôi dài ánh xanh — khác hẳn vệt sao băng mảnh, nhanh, trắng.
+        SO_SAO_CHOI = 4
+        hien_tuong_html = "".join(
+            '<div class="comet" style="top:{top}vh; left:{left}vw; animation-delay:{delay}s;"></div>'.format(
+                top=round(random.uniform(4, 45), 1),
+                left=round(random.uniform(20, 95), 1),
+                delay=round(i * (90 / SO_SAO_CHOI), 2),
+            )
+            for i in range(SO_SAO_CHOI)
         )
-        for i in range(SO_SAO_BANG)
-    )
-    return stars_small, stars_medium, stars_large, shooting_stars
+    else:
+        # Mặc định (kể cả ngày dải Ngân Hà): vẫn có sao băng như cũ, dải Ngân Hà sẽ vẽ
+        # chồng thêm lên bên trên chứ không thay thế sao băng.
+        SO_SAO_BANG = 24  # số sao băng/phút — chỉnh số này để dày/thưa hơn (càng cao càng tốn máy)
+        hien_tuong_html = "".join(
+            '<div class="shooting-star" style="top:{top}vh; left:{left}vw; animation-delay:{delay}s;"></div>'.format(
+                top=round(random.uniform(2, 55), 1),
+                left=round(random.uniform(15, 95), 1),
+                delay=round(i * (60 / SO_SAO_BANG), 2),
+            )
+            for i in range(SO_SAO_BANG)
+        )
+    return stars_small, stars_medium, stars_large, hien_tuong_html
 
 
 if dark_mode:
-    ST_SMALL, ST_MEDIUM, ST_LARGE, SHOOTING_STARS_HTML = _make_starfield_html()
+    HIEN_TUONG_DEM = hien_tuong_thien_van_hom_nay()
+    ST_SMALL, ST_MEDIUM, ST_LARGE, HIEN_TUONG_HTML = _make_starfield_html(HIEN_TUONG_DEM)
+    DANG_CO_NGAN_HA = HIEN_TUONG_DEM == "ngan_ha"
 
 # ---------------------------------------------------------------
 # CSS — giao diện
@@ -1083,8 +1120,49 @@ if dark_mode:
         /* Ai bật "giảm chuyển động" trong máy (Reduce Motion / Giảm chuyển động) thì tắt hẳn
            các hoạt ảnh trang trí này — vừa nhẹ máy vừa đúng ý người dùng. */
         @media (prefers-reduced-motion: reduce) {{
-            .stars-small, .stars-medium, .stars-large, .shooting-star, .moon {{ animation: none !important; }}
-            .shooting-star {{ opacity: 0 !important; }}
+            .stars-small, .stars-medium, .stars-large, .shooting-star, .comet, .moon {{ animation: none !important; }}
+            .shooting-star, .comet {{ opacity: 0 !important; }}
+            .ngan-ha {{ animation: none !important; opacity: 0.6 !important; }}
+        }}
+
+        /* --- Sao chổi: hiện tượng riêng của Thứ 4/6/CN — đầu sáng rực + đuôi dài ánh xanh,
+           bay chậm và hiếm hơn hẳn sao băng để cảm giác "đặc biệt" hơn. --- */
+        .comet {{
+            position: fixed; width: 220px; height: 3px; border-radius: 999px;
+            background: linear-gradient(90deg, rgba(186,230,253,0.95), rgba(186,230,253,0));
+            opacity: 0; transform: rotate(-28deg); animation: bay-sao-choi 90s ease-in infinite;
+            will-change: opacity, transform;
+        }}
+        .comet::before {{
+            content: ""; position: absolute; left: -3px; top: 50%; width: 9px; height: 9px;
+            transform: translateY(-50%); border-radius: 50%;
+            background: radial-gradient(circle, #ffffff 0%, #bae6fd 55%, transparent 100%);
+            box-shadow: 0 0 12px 4px rgba(186,230,253,0.85);
+        }}
+        @keyframes bay-sao-choi {{
+            0%, 93% {{ opacity: 0; transform: translate(0, 0) rotate(-28deg); }}
+            94% {{ opacity: 1; }}
+            98% {{ opacity: 1; transform: translate(-460px, 260px) rotate(-28deg); }}
+            100% {{ opacity: 0; transform: translate(-500px, 285px) rotate(-28deg); }}
+        }}
+        @media (max-width: 640px) {{
+            .comet {{ width: 150px; }}
+        }}
+
+        /* --- Dải Ngân Hà: chỉ hiện riêng vào Thứ 2, 1 dải sáng mờ chéo qua bầu trời, sáng mờ
+           dần lên xuống nhẹ nhàng — chỉ 1 lớp phủ (không sinh nhiều phần tử) nên vẫn nhẹ máy. --- */
+        .ngan-ha {{
+            position: fixed; top: -25vh; left: -25vw; width: 170vw; height: 55vh;
+            transform: rotate(-25deg); pointer-events: none;
+            background: linear-gradient(90deg,
+                transparent 0%, rgba(199,210,254,0.16) 15%, rgba(255,255,255,0.4) 38%,
+                rgba(216,180,254,0.3) 55%, rgba(199,210,254,0.18) 75%, transparent 100%);
+            filter: blur(5px);
+            animation: ngan-ha-sang 7s ease-in-out infinite;
+        }}
+        @keyframes ngan-ha-sang {{
+            0%, 100% {{ opacity: 0.55; }}
+            50% {{ opacity: 0.9; }}
         }}
 
         /* --- Mặt trăng: hình tròn vẽ bằng CSS (radial-gradient + vài "miệng hố" bằng
@@ -1121,11 +1199,12 @@ if dark_mode:
         }}
     </style>
     <div class="starfield" style="opacity: {DO_MO_BAU_TROI};">
+        {'<div class="ngan-ha"></div>' if DANG_CO_NGAN_HA else ''}
         <div class="moon"><div class="moon-shadow"></div></div>
         <div class="stars-small"></div>
         <div class="stars-medium"></div>
         <div class="stars-large"></div>
-        {SHOOTING_STARS_HTML}
+        {HIEN_TUONG_HTML}
     </div>
     """, unsafe_allow_html=True)
 else:
@@ -1192,9 +1271,34 @@ else:
         @media (prefers-reduced-motion: reduce) {{
             .sun, .cloud {{ animation: none !important; }}
         }}
+
+        /* --- Nhật thực: cứ mỗi 5 phút thì có 3 phút mặt trăng che mặt trời (300s/chu kỳ,
+           lặp vô tận, thuần CSS không cần JavaScript/hẹn giờ gì cả). Đĩa tối trượt ngang vào
+           che đúng vị trí mặt trời, có viền sáng nhẹ quanh mép kiểu "vành nhật hoa". Bộ đếm
+           chạy riêng từ lúc mở trang, không đồng bộ giờ thực giữa mọi người xem — chỉ là hiệu
+           ứng trang trí cho vui. --- */
+        .nhat-thuc {{
+            position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
+            border-radius: 50%; background: #1e293b;
+            box-shadow: 0 0 0 4px rgba(255, 200, 87, 0.55), 0 0 26px 8px rgba(255, 200, 87, 0.3);
+            animation: nhat-thuc 300s linear infinite;
+            will-change: transform;
+        }}
+        @keyframes nhat-thuc {{
+            0%, 38% {{ transform: translateX(130%); }}
+            40%, 98% {{ transform: translateX(0%); }}
+            100% {{ transform: translateX(130%); }}
+        }}
+        @media (max-width: 640px) {{
+            .nhat-thuc {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
+        }}
+        @media (prefers-reduced-motion: reduce) {{
+            .nhat-thuc {{ animation: none !important; transform: translateX(130%); }}
+        }}
     </style>
     <div class="daysky">
         <div class="sun"></div>
+        <div class="nhat-thuc"></div>
         {CLOUDS_HTML}
     </div>
     """, unsafe_allow_html=True)
