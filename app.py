@@ -33,6 +33,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("16/09/2026", "🔧 Sửa lỗi hiện chữ/code rối mắt phía trên thanh tab (do phần code vẽ dải Ngân Hà gây ra) — cảm ơn mọi người đã báo lỗi, giờ web hiện bình thường lại rồi."),
     ("16/09/2026", "🌌 Mỗi ngày trong tuần Chế độ tối có 1 hiện tượng thiên văn riêng: Thứ 2 là dải Ngân Hà sáng rực cả vùng trời, Thứ 4/6/CN là sao chổi (đầu sáng + đuôi dài ánh xanh, bay chậm và hiếm hơn), các ngày còn lại vẫn là sao băng như cũ. Chế độ sáng thì thêm nhật thực: cứ 5 phút web mở là có 3 phút mặt trăng che mặt trời rồi lại sáng ra, lặp lại đều đặn — tất cả đều vẽ bằng CSS thuần, không cần JavaScript nên điện thoại yếu vẫn chạy mượt."),
     ("16/09/2026", "🌙 Mặt trăng (Chế độ tối) giờ đổi hình dạng dần mỗi ngày theo đúng chu kỳ trăng thật (~29,5 ngày) thay vì luôn tròn y hệt. Mây/nắng/mưa (cả 2 chế độ) giờ cập nhật theo thời tiết THẬT ở Mỹ Tho, Tiền Giang (lấy miễn phí từ Open-Meteo, 30 phút mới gọi lại 1 lần nên không ảnh hưởng tốc độ): trời quang thì như cũ, nhiều mây thì mây dày/xám hơn và mặt trời/bầu trời sao mờ bớt, có mưa thì thêm hiệu ứng mưa rơi nhẹ nhàng bằng CSS (không dùng JavaScript nên điện thoại yếu vẫn mượt). Lỡ không lấy được thời tiết thì web tự quay về mây ngẫu nhiên như bản cũ, không lỗi gì cả."),
     ("16/09/2026", "🗣️ Admin giờ trả lời góp ý công khai được rồi: vào Hộp góp ý ở thanh bên → gõ câu trả lời ngay dưới góp ý đó → Lưu. Câu trả lời hiện ngay ở tab Góp ý cho mọi người xem (mục \"Admin đã trả lời\"), nhưng KHÔNG hiện tên người đã gửi góp ý — vẫn giữ ẩn danh như trước."),
@@ -722,6 +723,7 @@ if dark_mode:
     HIEN_TUONG_DEM = hien_tuong_thien_van_hom_nay()
     ST_SMALL, ST_MEDIUM, ST_LARGE, HIEN_TUONG_HTML = _make_starfield_html(HIEN_TUONG_DEM)
     DANG_CO_NGAN_HA = HIEN_TUONG_DEM == "ngan_ha"
+    NGAN_HA_HTML = '<div class="ngan-ha"></div>' if DANG_CO_NGAN_HA else ''
 
 # ---------------------------------------------------------------
 # CSS — giao diện
@@ -1198,8 +1200,7 @@ if dark_mode:
             .moon::after {{ width: 7px; height: 7px; top: 29px; left: 30px; box-shadow: -16px 4px 0 -2px rgba(120, 110, 70, 0.16); }}
         }}
     </style>
-    <div class="starfield" style="opacity: {DO_MO_BAU_TROI};">
-        {'<div class="ngan-ha"></div>' if DANG_CO_NGAN_HA else ''}
+    <div class="starfield" style="opacity: {DO_MO_BAU_TROI};">{NGAN_HA_HTML}
         <div class="moon"><div class="moon-shadow"></div></div>
         <div class="stars-small"></div>
         <div class="stars-medium"></div>
