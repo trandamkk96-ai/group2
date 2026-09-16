@@ -31,6 +31,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("16/09/2026", "⏳ Thêm mục \"Đếm ngược lịch thi/kiểm tra\" ngay trong tab Thời khóa biểu — Admin bấm \"➕ Thêm lịch thi\", gõ tên bài thi + chọn ngày là xong, không cần vào GitHub. Web tự đếm ngược \"Còn X ngày nữa\" cho mọi người xem, đến sát ngày thì đổi thành \"Ngày mai!\" rồi \"🔥 Hôm nay!\" cho dễ chú ý, và bài thi nào qua ngày rồi thì tự động biến mất khỏi danh sách, khỏi cần nhớ vào xoá."),
     ("15/09/2026", "📅 Banner \"Hôm nay học gì\" trên Trang chủ giờ thông minh hơn: sau 11h45 sáng (buổi học đã xong) tự động chuyển sang hiện lịch của NGÀY MAI luôn, để chuẩn bị trước cho hôm sau thay vì cứ hiện lịch hôm nay đã học xong."),
     ("15/09/2026", "📅 Thêm tab Thời khóa biểu (kế bên Trang chủ) — ai cũng xem được, Admin sửa thẳng trên web trong 10 giây (không cần vào GitHub nữa): mở tab này → bấm \"Sửa thời khóa biểu\" → gõ lại → Lưu là xong ngay."),
     ("15/09/2026", "⚡ Giảm tải cho điện thoại yếu: bớt bớt số sao/sao băng chạy hoạt ảnh ở Chế độ tối (trang mượt hơn hẳn), điện thoại màn nhỏ tự động bớt thêm một nửa sao băng, máy nào bật \"Giảm chuyển động\" thì web tự tắt hẳn hoạt ảnh trang trí."),
@@ -82,6 +83,15 @@ def init_db():
                 id SERIAL PRIMARY KEY,
                 noi_dung TEXT NOT NULL,
                 ngay TIMESTAMP NOT NULL DEFAULT now()
+            )
+        """))
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS lich_thi (
+                id SERIAL PRIMARY KEY,
+                tieu_de TEXT NOT NULL,
+                ngay_thi DATE NOT NULL,
+                ghi_chu TEXT,
+                ngay_dang TIMESTAMP NOT NULL DEFAULT now()
             )
         """))
         s.commit()
@@ -439,6 +449,61 @@ def _tach_dong_tkb(noi_dung):
     return cac_dong_dau, cac_ngay
 
 
+def add_lich_thi(tieu_de, ngay_thi, ghi_chu):
+    """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi)."""
+    with conn.session as s:
+        s.execute(
+            text("INSERT INTO lich_thi (tieu_de, ngay_thi, ghi_chu) VALUES (:td, :nt, :gc)"),
+            {"td": tieu_de, "nt": ngay_thi, "gc": ghi_chu or None},
+        )
+        s.commit()
+
+
+def load_lich_thi_sap_toi():
+    """Chỉ lấy các mốc thi từ HÔM NAY (giờ Hà Nội) trở đi — cái nào qua rồi tự động không
+    hiện nữa nữa, khỏi cần Admin nhớ vào xoá. Sắp xếp gần nhất lên đầu."""
+    hom_nay = datetime.now(GIO_HA_NOI).date()
+    return conn.query(
+        "SELECT id, tieu_de, ngay_thi, ghi_chu FROM lich_thi WHERE ngay_thi >= :hn ORDER BY ngay_thi ASC",
+        params={"hn": hom_nay}, ttl=0,
+    )
+
+
+def load_lich_thi_da_qua():
+    """Các mốc thi đã qua ngày — chỉ để Admin xem lại/dọn dẹp nếu muốn, người thường không thấy."""
+    hom_nay = datetime.now(GIO_HA_NOI).date()
+    return conn.query(
+        "SELECT id, tieu_de, ngay_thi, ghi_chu FROM lich_thi WHERE ngay_thi < :hn ORDER BY ngay_thi DESC",
+        params={"hn": hom_nay}, ttl=0,
+    )
+
+
+def delete_lich_thi(id_):
+    with conn.session as s:
+        s.execute(text("DELETE FROM lich_thi WHERE id = :id"), {"id": id_})
+        s.commit()
+
+
+def _chuan_hoa_ngay(gia_tri):
+    """Cột DATE trong Postgres tùy driver có lúc trả về datetime.date, có lúc trả về
+    Timestamp/datetime — chuẩn hóa về date để so sánh/định dạng cho chắc ăn."""
+    if isinstance(gia_tri, datetime):
+        return gia_tri.date()
+    return gia_tri
+
+
+def _dem_nguoc_lich_thi(ngay_thi):
+    """Trả về dòng chữ đếm ngược, ví dụ 'Còn 3 ngày nữa', tính theo NGÀY hôm nay ở Hà Nội
+    (không tính giờ phút) — nên dù xem lúc nào trong ngày thi thì vẫn hiện đúng 'Hôm nay!'."""
+    hom_nay = datetime.now(GIO_HA_NOI).date()
+    so_ngay = (_chuan_hoa_ngay(ngay_thi) - hom_nay).days
+    if so_ngay == 0:
+        return "🔥 Hôm nay!"
+    if so_ngay == 1:
+        return "⏰ Ngày mai!"
+    return f"Còn {so_ngay} ngày nữa"
+
+
 # ---------------------------------------------------------------
 # CHẾ ĐỘ TỐI — đặt sớm (trước CSS) để tính màu cho toàn bộ giao diện bên dưới.
 # Có thể bật thủ công (nút 🌙), hoặc để web TỰ ĐỘNG đổi theo giờ Hà Nội:
@@ -602,6 +667,29 @@ st.markdown(f"""
         font-weight: 800; font-size: 0.82rem; border-radius: 999px; padding: 5px 12px;
     }}
     .tkb-mon {{ color: {C_TEXT}; font-size: 0.95rem; line-height: 1.5; }}
+
+    /* --- Thẻ đếm ngược lịch thi/kiểm tra --- */
+    .lich-thi-tieu-de {{
+        font-weight: 800; color: {C_TEXT}; font-size: 1rem; margin: 22px 0 12px 0;
+    }}
+    .lich-thi-the {{
+        display: flex; align-items: center; justify-content: space-between; gap: 14px;
+        background: {C_CARD}; border: 1px solid {C_BORDER}; border-left: 4px solid #ef4444;
+        border-radius: 12px; padding: 14px 18px; margin-bottom: 10px;
+        animation: fadeInUp 0.4s ease both;
+    }}
+    .lich-thi-the.sap-toi {{ border-left: 4px solid #f59e0b; }}
+    .lich-thi-the.hom-nay {{ border-left: 4px solid #ef4444; animation: goldGlow 1.8s ease-in-out infinite; }}
+    .lich-thi-thong-tin {{ flex: 1 1 auto; min-width: 0; }}
+    .lich-thi-ten {{ font-weight: 800; color: {C_TEXT}; font-size: 0.98rem; line-height: 1.4; }}
+    .lich-thi-ngay {{ color: {C_MUTED}; font-size: 0.82rem; margin-top: 2px; }}
+    .lich-thi-ghichu {{ color: {C_MUTED}; font-size: 0.85rem; margin-top: 4px; line-height: 1.4; white-space: pre-wrap; }}
+    .lich-thi-dem-nguoc {{
+        flex: 0 0 auto; text-align: center;
+        background: linear-gradient(135deg, #ef4444, #f97316); color: white;
+        font-weight: 800; font-size: 0.82rem; border-radius: 999px; padding: 7px 16px;
+        white-space: nowrap;
+    }}
 
     /* --- Banner "Tin mới nhất" hiện gọn trên Trang chủ (khi Admin có đăng tin) --- */
     .home-news-banner {{
@@ -1391,6 +1479,77 @@ with tab_tkb:
                 '</div>',
                 unsafe_allow_html=True,
             )
+
+    # -------------------------------------------------------------
+    # ĐẾM NGƯỢC LỊCH THI/KIỂM TRA
+    #
+    # CÁCH THÊM/XOÁ LỊCH THI NHANH GỌN — KHÔNG CẦN ĐỘNG VÀO CODE:
+    # đăng nhập Admin ở thanh bên → vào tab này → mở mục "➕ Thêm lịch thi"
+    # bên dưới → điền tên bài thi + ngày thi → bấm Lưu. Lịch thi đã qua ngày
+    # sẽ TỰ ĐỘNG biến mất khỏi danh sách, không cần vào xoá tay.
+    # -------------------------------------------------------------
+    st.markdown('<div class="lich-thi-tieu-de">⏳ Đếm ngược lịch thi / kiểm tra</div>', unsafe_allow_html=True)
+
+    if is_admin:
+        with st.expander("➕ Thêm lịch thi (chỉ Admin thấy mục này)"):
+            with st.form("form_them_lich_thi", clear_on_submit=True):
+                tieu_de_lich_thi = st.text_input("Tên bài thi/kiểm tra:", placeholder="VD: Kiểm tra giữa kỳ Toán")
+                ngay_thi_moi = st.date_input(
+                    "Ngày thi:", value=datetime.now(GIO_HA_NOI).date(),
+                )
+                ghi_chu_lich_thi = st.text_input("Ghi chú (không bắt buộc):", placeholder="VD: Phòng A3, mang máy tính")
+                da_luu_lich_thi = st.form_submit_button("💾 Lưu lịch thi", use_container_width=True)
+                if da_luu_lich_thi:
+                    if tieu_de_lich_thi.strip():
+                        add_lich_thi(tieu_de_lich_thi.strip(), ngay_thi_moi, ghi_chu_lich_thi.strip())
+                        st.success("Đã lưu lịch thi mới!")
+                        st.rerun()
+                    else:
+                        st.error("Vui lòng nhập tên bài thi/kiểm tra.")
+
+        cac_lich_thi_da_qua = load_lich_thi_da_qua()
+        if not cac_lich_thi_da_qua.empty:
+            with st.expander("🗑️ Lịch thi đã qua (chỉ Admin thấy mục này)"):
+                for _, dong in cac_lich_thi_da_qua.iterrows():
+                    cot_ten, cot_xoa = st.columns([5, 1])
+                    with cot_ten:
+                        st.caption(f"{_chuan_hoa_ngay(dong['ngay_thi']).strftime('%d/%m/%Y')} — {dong['tieu_de']}")
+                    with cot_xoa:
+                        if st.button("Xoá", key=f"xoa_lich_thi_qua_{dong['id']}"):
+                            delete_lich_thi(dong["id"])
+                            st.rerun()
+        st.write("")
+
+    cac_lich_thi_sap_toi = load_lich_thi_sap_toi()
+    if cac_lich_thi_sap_toi.empty:
+        st.caption("🎉 Hiện chưa có lịch thi/kiểm tra nào sắp tới.")
+    else:
+        for _, dong in cac_lich_thi_sap_toi.iterrows():
+            ngay_thi_chuan = _chuan_hoa_ngay(dong["ngay_thi"])
+            so_ngay_con_lai = (ngay_thi_chuan - datetime.now(GIO_HA_NOI).date()).days
+            lop_css = "hom-nay" if so_ngay_con_lai == 0 else ("sap-toi" if so_ngay_con_lai <= 3 else "")
+            ghi_chu_html = (
+                f'<div class="lich-thi-ghichu">📌 {html.escape(dong["ghi_chu"])}</div>'
+                if dong["ghi_chu"] else ""
+            )
+            cot_the, cot_xoa_the = (st.columns([20, 1]) if is_admin else (st.container(), None))
+            with cot_the:
+                st.markdown(
+                    f'<div class="lich-thi-the {lop_css}">'
+                    '<div class="lich-thi-thong-tin">'
+                    f'<div class="lich-thi-ten">{html.escape(dong["tieu_de"])}</div>'
+                    f'<div class="lich-thi-ngay">📅 {ngay_thi_chuan.strftime("%d/%m/%Y")} ({_TEN_THU_VN[ngay_thi_chuan.weekday()]})</div>'
+                    f'{ghi_chu_html}'
+                    '</div>'
+                    f'<div class="lich-thi-dem-nguoc">{html.escape(_dem_nguoc_lich_thi(dong["ngay_thi"]))}</div>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
+            if is_admin:
+                with cot_xoa_the:
+                    if st.button("✖", key=f"xoa_lich_thi_{dong['id']}", help="Xoá lịch thi này"):
+                        delete_lich_thi(dong["id"])
+                        st.rerun()
 
 
 # =================================================================
