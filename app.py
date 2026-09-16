@@ -31,7 +31,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("16/09/2026", "⏳ Thêm mục \"Đếm ngược lịch thi/kiểm tra\" ngay trong tab Thời khóa biểu — Admin bấm \"➕ Thêm lịch thi\", gõ tên bài thi + chọn ngày là xong, không cần vào GitHub. Web tự đếm ngược \"Còn X ngày nữa\" cho mọi người xem, đến sát ngày thì đổi thành \"Ngày mai!\" rồi \"🔥 Hôm nay!\" cho dễ chú ý, và bài thi nào qua ngày rồi thì tự động biến mất khỏi danh sách, khỏi cần nhớ vào xoá."),
+    ("16/09/2026", "⏳ Thêm mục \"Đếm ngược lịch thi/kiểm tra\" ngay trong tab Thời khóa biểu — Admin bấm \"➕ Thêm lịch thi\", gõ tên bài thi + chọn ngày là xong, không cần vào GitHub. Web tự đếm ngược \"Còn X ngày nữa\" cho mọi người xem, đến sát ngày thì đổi thành \"Ngày mai!\" rồi \"🔥 Hôm nay!\" cho dễ chú ý, bài thi nào qua ngày rồi thì tự động biến mất khỏi danh sách. Lịch thi gần nhất còn hiện ngay banner trên Trang chủ luôn, khỏi cần bấm vào tab mới thấy."),
     ("15/09/2026", "📅 Banner \"Hôm nay học gì\" trên Trang chủ giờ thông minh hơn: sau 11h45 sáng (buổi học đã xong) tự động chuyển sang hiện lịch của NGÀY MAI luôn, để chuẩn bị trước cho hôm sau thay vì cứ hiện lịch hôm nay đã học xong."),
     ("15/09/2026", "📅 Thêm tab Thời khóa biểu (kế bên Trang chủ) — ai cũng xem được, Admin sửa thẳng trên web trong 10 giây (không cần vào GitHub nữa): mở tab này → bấm \"Sửa thời khóa biểu\" → gõ lại → Lưu là xong ngay."),
     ("15/09/2026", "⚡ Giảm tải cho điện thoại yếu: bớt bớt số sao/sao băng chạy hoạt ảnh ở Chế độ tối (trang mượt hơn hẳn), điện thoại màn nhỏ tự động bớt thêm một nửa sao băng, máy nào bật \"Giảm chuyển động\" thì web tự tắt hẳn hoạt ảnh trang trí."),
@@ -715,6 +715,23 @@ st.markdown(f"""
     .home-tkb-label {{ font-size: 0.72rem; font-weight: 800; text-transform: uppercase; opacity: 0.85; letter-spacing: 0.03em; }}
     .home-tkb-text {{ font-size: 1rem; font-weight: 600; margin-top: 4px; line-height: 1.5; }}
 
+    /* --- Banner "Lịch thi gần nhất" trên Trang chủ --- */
+    .home-examen-banner {{
+        display: flex; align-items: center; justify-content: space-between; gap: 14px;
+        background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+        border-radius: 14px; padding: 14px 20px; margin-bottom: 20px; color: white;
+        box-shadow: 0 6px 16px rgba(239, 68, 68, 0.25);
+        animation: fadeInUp 0.4s ease both;
+    }}
+    .home-examen-banner.hom-nay {{ animation: fadeInUp 0.4s ease both, goldGlow 1.8s ease-in-out infinite; }}
+    .home-examen-label {{ font-size: 0.72rem; font-weight: 800; text-transform: uppercase; opacity: 0.85; letter-spacing: 0.03em; }}
+    .home-examen-text {{ font-size: 1rem; font-weight: 600; margin-top: 4px; line-height: 1.5; }}
+    .home-examen-dem-nguoc {{
+        flex: 0 0 auto; text-align: center; background: rgba(255, 255, 255, 0.22);
+        font-weight: 800; font-size: 0.85rem; border-radius: 999px; padding: 8px 18px;
+        white-space: nowrap;
+    }}
+
     /* --- Danh sách "Cập nhật mới nhất" dạng timeline --- */
     .update-item {{
         background: {C_CARD}; border: 1px solid {C_BORDER}; border-left: 4px solid #f59e0b;
@@ -1135,6 +1152,25 @@ with tab_home:
             '<div class="home-tkb-banner nghi">'
             f'<div class="home-tkb-label">📅 {html.escape(nhan_ngay_tkb)} ({html.escape(thu_hien_thi_tkb)})</div>'
             '<div class="home-tkb-text">🎉 Không có lịch học trong Thời khóa biểu.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+    # --- Lịch thi gần nhất (nếu Admin có thêm ở tab "📅 Thời khóa biểu") ---
+    # Chỉ hiện lịch thi GẦN NHẤT sắp tới — không thêm gì thì không hiện gì ở đây cả.
+    lich_thi_gan_nhat_df = load_lich_thi_sap_toi()
+    if not lich_thi_gan_nhat_df.empty:
+        lich_thi_gan_nhat = lich_thi_gan_nhat_df.iloc[0]
+        ngay_thi_gan_nhat = _chuan_hoa_ngay(lich_thi_gan_nhat["ngay_thi"])
+        lop_examen_css = "hom-nay" if ngay_thi_gan_nhat == datetime.now(GIO_HA_NOI).date() else ""
+        st.markdown(
+            f'<div class="home-examen-banner {lop_examen_css}">'
+            '<div>'
+            '<div class="home-examen-label">⏳ Lịch thi gần nhất</div>'
+            f'<div class="home-examen-text">{html.escape(lich_thi_gan_nhat["tieu_de"])} '
+            f'— {ngay_thi_gan_nhat.strftime("%d/%m/%Y")} ({_TEN_THU_VN[ngay_thi_gan_nhat.weekday()]})</div>'
+            '</div>'
+            f'<div class="home-examen-dem-nguoc">{html.escape(_dem_nguoc_lich_thi(lich_thi_gan_nhat["ngay_thi"]))}</div>'
             '</div>',
             unsafe_allow_html=True,
         )
