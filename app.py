@@ -1,11 +1,13 @@
 import html
 import io
+import math
 import random
 import re
 from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 import qrcode
+import requests
 import streamlit as st
 from sqlalchemy import text
 from reportlab.lib import colors
@@ -31,6 +33,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("16/09/2026", "🌙 Mặt trăng (Chế độ tối) giờ đổi hình dạng dần mỗi ngày theo đúng chu kỳ trăng thật (~29,5 ngày) thay vì luôn tròn y hệt. Mây/nắng/mưa (cả 2 chế độ) giờ cập nhật theo thời tiết THẬT ở Mỹ Tho, Tiền Giang (lấy miễn phí từ Open-Meteo, 30 phút mới gọi lại 1 lần nên không ảnh hưởng tốc độ): trời quang thì như cũ, nhiều mây thì mây dày/xám hơn và mặt trời/bầu trời sao mờ bớt, có mưa thì thêm hiệu ứng mưa rơi nhẹ nhàng bằng CSS (không dùng JavaScript nên điện thoại yếu vẫn mượt). Lỡ không lấy được thời tiết thì web tự quay về mây ngẫu nhiên như bản cũ, không lỗi gì cả."),
     ("16/09/2026", "🗣️ Admin giờ trả lời góp ý công khai được rồi: vào Hộp góp ý ở thanh bên → gõ câu trả lời ngay dưới góp ý đó → Lưu. Câu trả lời hiện ngay ở tab Góp ý cho mọi người xem (mục \"Admin đã trả lời\"), nhưng KHÔNG hiện tên người đã gửi góp ý — vẫn giữ ẩn danh như trước."),
     ("16/09/2026", "🎨 Làm đẹp lại giao diện bảng xếp hạng/thẻ thành viên: đổi font chữ mới (Be Vietnam Pro, rõ dấu tiếng Việt hơn), thẻ xếp hạng có viền màu riêng theo từng người, số hạng đổi thành khung tròn, điểm số có mũi tên ▲▼ tăng/giảm, bục top 3 có ánh sáng lướt nhẹ ở hạng Nhất, thẻ hiện lần lượt mượt mà khi tải trang, nút bấm/tab có hiệu ứng nhấn nhẹ khi rê chuột."),
     ("16/09/2026", "⏳ Thêm mục \"Đếm ngược lịch thi/kiểm tra\" ngay trong tab Thời khóa biểu — Admin bấm \"➕ Thêm lịch thi\", gõ tên bài thi + chọn ngày là xong, không cần vào GitHub. Web tự đếm ngược \"Còn X ngày nữa\" cho mọi người xem, đến sát ngày thì đổi thành \"Ngày mai!\" rồi \"🔥 Hôm nay!\" cho dễ chú ý, bài thi nào qua ngày rồi thì tự động biến mất khỏi danh sách. Lịch thi gần nhất còn hiện ngay banner trên Trang chủ luôn, khỏi cần bấm vào tab mới thấy."),
@@ -600,6 +603,57 @@ else:
     C_BG_CSS = "linear-gradient(180deg, #dbeafe 0%, #eff6ff 32%, #f8fafc 65%)"
 
 
+# ---------------------------------------------------------------
+# THỜI TIẾT MỸ THO, TIỀN GIANG — lấy từ Open-Meteo (miễn phí, không cần đăng ký API key)
+# để mây/nắng/mưa trên giao diện đổi theo thời tiết THẬT ngoài đời, thay vì chỉ random.
+# ---------------------------------------------------------------
+TOA_DO_MY_THO = (10.35806, 106.36417)  # Mỹ Tho, Tiền Giang
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def lay_thoi_tiet_my_tho():
+    """Gọi Open-Meteo lấy thời tiết hiện tại ở Mỹ Tho. Cache 30 phút — nhiều người mở web
+    cùng lúc cũng chỉ tốn 1 lượt gọi mạng, không ảnh hưởng tốc độ tải trang.
+    Lỡ mạng lỗi/API sập thì trả về None một cách âm thầm — web tự chuyển sang mây ngẫu nhiên
+    như trước, KHÔNG hiện lỗi gì cho người dùng thấy (đây chỉ là hiệu ứng trang trí)."""
+    try:
+        lat, lon = TOA_DO_MY_THO
+        res = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={"latitude": lat, "longitude": lon, "current": "weather_code", "timezone": "Asia/Bangkok"},
+            timeout=4,
+        )
+        res.raise_for_status()
+        ma = res.json()["current"]["weather_code"]
+        return _phan_loai_thoi_tiet(ma)
+    except Exception:
+        return None
+
+
+def _phan_loai_thoi_tiet(ma):
+    """Quy đổi mã thời tiết WMO của Open-Meteo về 4 nhóm đơn giản để vẽ giao diện."""
+    if ma == 0:
+        return "nang"
+    if ma in (95, 96, 99):
+        return "mua_to"  # giông/sấm sét
+    if ma >= 51:  # mưa phùn, mưa, mưa rào, tuyết... đều tính là có mưa
+        return "mua"
+    return "may"  # 1-3 (ít mây/nhiều mây), 45/48 (sương mù)
+
+
+TRANG_THAI_THOI_TIET = lay_thoi_tiet_my_tho()  # None nếu không lấy được -> dùng mây ngẫu nhiên
+DANG_MUA = TRANG_THAI_THOI_TIET in ("mua", "mua_to")
+
+
+def pha_mat_trang(ngay):
+    """Mặt trăng đổi hình dạng dần theo chu kỳ trăng thật (~29.53 ngày), tính từ 1 mốc
+    trăng non đã biết (6/1/2000). Trả về số 0..1 (0 = trăng non, 0.5 = trăng tròn)."""
+    tham_chieu = datetime(2000, 1, 6, 18, 14, tzinfo=timezone.utc)
+    so_ngay = (ngay - tham_chieu).total_seconds() / 86400
+    chu_ky = 29.530588853
+    return (so_ngay % chu_ky) / chu_ky
+
+
 def _make_starfield_html():
     """Tạo nền bầu trời sao cho Chế độ tối: các chấm sao lấp lánh (kỹ thuật box-shadow,
     không cần JavaScript) + sao băng bay ngang qua màn hình.
@@ -974,7 +1028,23 @@ st.markdown(f"""
 
 # --- Bầu trời sao cho Chế độ tối (sao lấp lánh + sao băng dày đặc + mặt trăng) ---
 # Chỉ hiện khi bật Chế độ tối; ở giao diện thường (sáng) không có gì thay đổi ở đây.
+#
+# CẬP NHẬT THEO THỜI TIẾT THẬT: mặt trăng đổi hình dạng dần mỗi ngày theo đúng chu kỳ trăng
+# (~29,5 ngày, tính toán trong pha_mat_trang() — không cần gọi mạng). Bầu trời sao còn mờ đi
+# nếu Mỹ Tho đang nhiều mây/mưa thật ngoài đời (lấy 1 lần/30 phút từ Open-Meteo, xem
+# lay_thoi_tiet_my_tho() ở trên) — lỡ không lấy được thời tiết thì bầu trời vẫn hiện bình
+# thường như cũ, không có gì thay đổi.
 if dark_mode:
+    pha_trang_hien_tai = pha_mat_trang(datetime.now(GIO_HA_NOI))
+    DO_LECH_TRANG = round(50 * (1 - math.cos(2 * math.pi * pha_trang_hien_tai)), 1)  # 0..100%
+
+    if TRANG_THAI_THOI_TIET in ("mua", "mua_to"):
+        DO_MO_BAU_TROI = 0.32
+    elif TRANG_THAI_THOI_TIET == "may":
+        DO_MO_BAU_TROI = 0.6
+    else:
+        DO_MO_BAU_TROI = 1.0  # nắng, hoặc không lấy được thời tiết -> hiện như cũ
+
     st.markdown(f"""
     <style>
         .starfield {{ position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }}
@@ -1018,12 +1088,19 @@ if dark_mode:
         }}
 
         /* --- Mặt trăng: hình tròn vẽ bằng CSS (radial-gradient + vài "miệng hố" bằng
-           box-shadow), có quầng sáng nhẹ nhàng lên xuống cho sinh động. --- */
+           box-shadow), có quầng sáng nhẹ nhàng lên xuống cho sinh động. Phần khuyết
+           (.moon-shadow) là 1 vòng tròn màu nền trời đè lên, trượt ngang theo pha trăng
+           thật của ngày hôm đó — không cần ảnh/JavaScript gì cả, chỉ thuần CSS. --- */
         .moon {{
             position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
-            border-radius: 50%;
+            border-radius: 50%; overflow: hidden;
             background: radial-gradient(circle at 35% 32%, #fffef4 0%, #fdf6d8 45%, #e9e0b0 75%, #d9d093 100%);
             animation: moonGlow 6s ease-in-out infinite;
+        }}
+        .moon-shadow {{
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 50%;
+            background: {C_BG}; transform: translateX({DO_LECH_TRANG}%);
+            transition: transform 1s ease; z-index: 2;
         }}
         .moon::before, .moon::after {{
             content: ""; position: absolute; border-radius: 50%; background: rgba(120, 110, 70, 0.18);
@@ -1043,8 +1120,8 @@ if dark_mode:
             .moon::after {{ width: 7px; height: 7px; top: 29px; left: 30px; box-shadow: -16px 4px 0 -2px rgba(120, 110, 70, 0.16); }}
         }}
     </style>
-    <div class="starfield">
-        <div class="moon"></div>
+    <div class="starfield" style="opacity: {DO_MO_BAU_TROI};">
+        <div class="moon"><div class="moon-shadow"></div></div>
         <div class="stars-small"></div>
         <div class="stars-medium"></div>
         <div class="stars-large"></div>
@@ -1054,25 +1131,38 @@ if dark_mode:
 else:
     # --- Bầu trời ban ngày cho Chế độ sáng: mặt trời phát sáng + vài đám mây trôi nhẹ ---
     # đặt cùng vị trí với mặt trăng bên Chế độ tối cho hai giao diện "đối xứng" nhau.
-    # Vị trí mây random nhẹ mỗi lần tải trang, cho đỡ nhàm khi ai cũng thấy y hệt nhau.
+    #
+    # SỐ LƯỢNG/MÀU MÂY + ĐỘ SÁNG MẶT TRỜI đổi theo thời tiết THẬT ở Mỹ Tho (nắng: mây thưa
+    # trắng, mặt trời rõ; nhiều mây: mây dày hơn, xám nhẹ, mặt trời mờ bớt; mưa: mây xám đậm,
+    # mặt trời gần như khuất). Không lấy được thời tiết (mạng lỗi/API sập) thì TỰ ĐỘNG quay về
+    # mây ngẫu nhiên như bản gốc — vị trí random nhẹ mỗi lần tải trang cho đỡ nhàm.
+    if TRANG_THAI_THOI_TIET == "nang":
+        SO_MAY, MAU_MAY, DO_SANG_MAT_TROI = 2, "#ffffff", 1.0
+    elif TRANG_THAI_THOI_TIET == "may":
+        SO_MAY, MAU_MAY, DO_SANG_MAT_TROI = 5, "#e2e8f0", 0.5
+    elif TRANG_THAI_THOI_TIET in ("mua", "mua_to"):
+        SO_MAY, MAU_MAY, DO_SANG_MAT_TROI = 6, "#94a3b8", 0.15
+    else:
+        SO_MAY, MAU_MAY, DO_SANG_MAT_TROI = 3, "#ffffff", 1.0  # không rõ thời tiết -> như cũ
+
     _may = [
-        (round(random.uniform(8, 16), 1), round(random.uniform(5, 25), 1), 22),
-        (round(random.uniform(28, 40), 1), round(random.uniform(60, 80), 1), 26),
-        (round(random.uniform(48, 60), 1), round(random.uniform(15, 35), 1), 18),
+        (round(random.uniform(5, 62), 1), round(random.uniform(3, 88), 1), round(random.uniform(16, 27), 1))
+        for _ in range(SO_MAY)
     ]
     CLOUDS_HTML = "".join(
         f'<div class="cloud" style="top:{top}vh; left:{left}vw; animation-delay:{-i * 4}s; '
-        f'transform: scale({scale / 22});"></div>'
+        f'transform: scale({scale / 22}); --mau-may: {MAU_MAY};"></div>'
         for i, (top, left, scale) in enumerate(_may)
     )
     st.markdown(f"""
     <style>
         .daysky {{ position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }}
 
-        /* --- Mặt trời: hình tròn vẽ bằng CSS, ánh sáng ấm, quầng sáng nhấp nháy nhẹ --- */
+        /* --- Mặt trời: hình tròn vẽ bằng CSS, ánh sáng ấm, quầng sáng nhấp nháy nhẹ.
+           Mờ bớt khi trời nhiều mây/mưa (opacity), không ẩn hẳn để tránh đổi cảnh đột ngột. --- */
         .sun {{
             position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
-            border-radius: 50%;
+            border-radius: 50%; opacity: {DO_SANG_MAT_TROI};
             background: radial-gradient(circle at 35% 32%, #fffdf2 0%, #ffe89b 40%, #ffc857 75%, #ffb347 100%);
             animation: sunGlow 5s ease-in-out infinite;
         }}
@@ -1084,15 +1174,17 @@ else:
             .sun {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
         }}
 
-        /* --- Mây trôi: 1 khối bo tròn + 2 "cục bông" (::before/::after) ghép lại --- */
+        /* --- Mây trôi: 1 khối bo tròn + 2 "cục bông" (::before/::after) ghép lại. Màu mây
+           (--mau-may, đặt inline theo từng đám) tự truyền xuống 2 "cục bông" luôn nhờ dùng
+           biến CSS, không cần lặp lại màu 3 lần. --- */
         .cloud {{
             position: fixed; width: 90px; height: 32px; border-radius: 999px;
-            background: #ffffff; opacity: 0.8;
+            background: var(--mau-may, #ffffff); opacity: 0.85;
             box-shadow: 0 6px 14px rgba(148, 163, 184, 0.18);
             animation: troiMay 22s ease-in-out infinite alternate;
         }}
         .cloud::before, .cloud::after {{
-            content: ""; position: absolute; border-radius: 50%; background: #ffffff;
+            content: ""; position: absolute; border-radius: 50%; background: var(--mau-may, #ffffff);
         }}
         .cloud::before {{ width: 46px; height: 46px; top: -22px; left: 10px; }}
         .cloud::after {{ width: 36px; height: 36px; top: -15px; left: 44px; }}
@@ -1105,6 +1197,35 @@ else:
         <div class="sun"></div>
         {CLOUDS_HTML}
     </div>
+    """, unsafe_allow_html=True)
+
+# --- Mưa (dùng chung cho cả Chế độ tối lẫn sáng) — chỉ hiện khi Mỹ Tho đang có mưa thật,
+# vẽ hoàn toàn bằng CSS (1 lớp phủ full màn hình, chạy animation dịch chuyển nền — rất nhẹ,
+# không dùng JavaScript hay nhiều phần tử như sao/mây nên không ảnh hưởng gì đến tốc độ,
+# kể cả trên điện thoại yếu). Giông bão (mua_to) thì mưa dày và rơi nhanh hơn 1 chút. ---
+if DANG_MUA:
+    _mua_day = TRANG_THAI_THOI_TIET == "mua_to"
+    st.markdown(f"""
+    <style>
+        .mua-overlay {{
+            position: fixed; inset: 0; z-index: -1; pointer-events: none;
+            background-image: repeating-linear-gradient(
+                115deg, transparent 0px, transparent 2px,
+                rgba(255,255,255,0.4) 2px, rgba(255,255,255,0.4) 3px,
+                transparent 3px, transparent {24 if _mua_day else 36}px
+            );
+            opacity: {0.65 if _mua_day else 0.48};
+            animation: mua-roi {0.4 if _mua_day else 0.65}s linear infinite;
+        }}
+        @keyframes mua-roi {{
+            from {{ background-position: 0 0; }}
+            to {{ background-position: -30px 90px; }}
+        }}
+        @media (prefers-reduced-motion: reduce) {{
+            .mua-overlay {{ animation: none !important; opacity: 0.3; }}
+        }}
+    </style>
+    <div class="mua-overlay"></div>
     """, unsafe_allow_html=True)
 
 
