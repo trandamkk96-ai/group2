@@ -31,6 +31,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("16/09/2026", "🎨 Làm đẹp lại giao diện bảng xếp hạng/thẻ thành viên: đổi font chữ mới (Be Vietnam Pro, rõ dấu tiếng Việt hơn), thẻ xếp hạng có viền màu riêng theo từng người, số hạng đổi thành khung tròn, điểm số có mũi tên ▲▼ tăng/giảm, bục top 3 có ánh sáng lướt nhẹ ở hạng Nhất, thẻ hiện lần lượt mượt mà khi tải trang, nút bấm/tab có hiệu ứng nhấn nhẹ khi rê chuột."),
     ("16/09/2026", "⏳ Thêm mục \"Đếm ngược lịch thi/kiểm tra\" ngay trong tab Thời khóa biểu — Admin bấm \"➕ Thêm lịch thi\", gõ tên bài thi + chọn ngày là xong, không cần vào GitHub. Web tự đếm ngược \"Còn X ngày nữa\" cho mọi người xem, đến sát ngày thì đổi thành \"Ngày mai!\" rồi \"🔥 Hôm nay!\" cho dễ chú ý, bài thi nào qua ngày rồi thì tự động biến mất khỏi danh sách. Lịch thi gần nhất còn hiện ngay banner trên Trang chủ luôn, khỏi cần bấm vào tab mới thấy."),
     ("15/09/2026", "📅 Banner \"Hôm nay học gì\" trên Trang chủ giờ thông minh hơn: sau 11h45 sáng (buổi học đã xong) tự động chuyển sang hiện lịch của NGÀY MAI luôn, để chuẩn bị trước cho hôm sau thay vì cứ hiện lịch hôm nay đã học xong."),
     ("15/09/2026", "📅 Thêm tab Thời khóa biểu (kế bên Trang chủ) — ai cũng xem được, Admin sửa thẳng trên web trong 10 giây (không cần vào GitHub nữa): mở tab này → bấm \"Sửa thời khóa biểu\" → gõ lại → Lưu là xong ngay."),
@@ -607,6 +608,12 @@ if dark_mode:
 # ---------------------------------------------------------------
 st.markdown(f"""
 <style>
+    /* --- Font chữ đẹp hơn, hỗ trợ tiếng Việt có dấu rõ nét (Be Vietnam Pro) --- */
+    @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
+    html, body, [class*="css"] {{
+        font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+    }}
+
     html, body {{ background: {C_BG_CSS} !important; }}
     /* LƯU Ý: .stApp của Streamlit vốn đã là position: absolute; inset: 0 (để tự phủ kín màn hình).
        KHÔNG được ghi đè "position" ở đây — nếu đổi thành "relative" thì khung này sẽ co về
@@ -773,48 +780,69 @@ st.markdown(f"""
     /* --- Podium top 3 --- */
     .podium-wrap {{ display: flex; align-items: flex-end; justify-content: center; gap: 14px; margin: 8px 0 26px; }}
     .podium-block {{
+        position: relative; overflow: hidden;
         flex: 1; max-width: 220px; border-radius: 16px 16px 6px 6px; padding: 14px 10px 18px;
         text-align: center; color: white; box-shadow: 0 6px 16px rgba(0,0,0,0.12);
         animation: fadeInUp 0.5s ease both;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }}
-    .podium-block:hover {{ transform: translateY(-6px) scale(1.03); }}
+    .podium-block:hover {{ transform: translateY(-6px) scale(1.03); box-shadow: 0 12px 26px rgba(0,0,0,0.18); }}
     .podium-block.gold {{
         background: linear-gradient(180deg,#fde68a,#f59e0b); height: 200px; order: 2;
         animation: fadeInUp 0.5s ease both, goldGlow 2.4s ease-in-out infinite;
     }}
     .podium-block.silver {{ background: linear-gradient(180deg,#e5e7eb,#94a3b8); height: 160px; order: 1; }}
     .podium-block.bronze {{ background: linear-gradient(180deg,#fed7aa,#fb923c); height: 140px; order: 3; }}
-    .podium-medal {{ font-size: 2rem; line-height: 1; }}
+    /* Ánh sáng lướt qua bục hạng Nhất cho lấp lánh nhẹ, không gây rối mắt */
+    .podium-block.gold::after {{
+        content: ""; position: absolute; top: 0; left: -60%; width: 40%; height: 100%;
+        background: linear-gradient(120deg, transparent, rgba(255,255,255,0.55), transparent);
+        transform: skewX(-20deg); animation: shine 3.2s ease-in-out infinite;
+    }}
+    @keyframes shine {{
+        0% {{ left: -60%; }}
+        45%, 100% {{ left: 130%; }}
+    }}
+    .podium-medal {{ font-size: 2rem; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.15)); }}
     .podium-avatar {{
         width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,0.3);
         display: flex; align-items: center; justify-content: center; font-weight: 800;
-        font-size: 1.2rem; margin: 6px auto; border: 2px solid rgba(255,255,255,0.7);
+        font-size: 1.2rem; margin: 6px auto; border: 2px solid rgba(255,255,255,0.8);
+        box-shadow: 0 0 0 4px rgba(255,255,255,0.2);
     }}
     .podium-name {{ font-weight: 800; font-size: 1rem; margin-top: 2px; word-break: break-word; }}
     .podium-score {{ font-weight: 800; font-size: 1.05rem; margin-top: 4px; }}
 
     /* --- Thẻ xếp hạng (hạng 4 trở đi, hoặc khi tìm kiếm) --- */
     .rank-card {{
-        background: {C_CARD}; border: 1px solid {C_BORDER}; border-radius: 16px;
+        background: {C_CARD}; border: 1px solid {C_BORDER}; border-left: 4px solid var(--diem-mau, {C_BORDER});
+        border-radius: 14px;
         padding: 14px 20px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
         transition: transform 0.15s ease, box-shadow 0.15s ease;
         animation: fadeInUp 0.4s ease both;
     }}
-    .rank-card:hover {{ transform: translateY(-2px) scale(1.005); box-shadow: 0 6px 16px rgba(16, 24, 40, 0.08); }}
+    .rank-card:hover {{ transform: translateY(-2px) scale(1.005); box-shadow: 0 8px 20px rgba(16, 24, 40, 0.1); }}
     .rank-card-top {{ display: flex; align-items: center; gap: 16px; }}
 
-    .rank-badge {{ width: 34px; min-width: 34px; text-align: center; font-size: 1.1rem; font-weight: 800; color: {C_MUTED}; }}
+    .rank-badge {{
+        width: 32px; height: 32px; min-width: 32px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        background: {C_TRACK}; font-size: 0.95rem; font-weight: 800; color: {C_MUTED};
+    }}
 
     .avatar {{
         width: 42px; height: 42px; min-width: 42px; border-radius: 50%;
         display: flex; align-items: center; justify-content: center;
         font-weight: 800; font-size: 1rem; color: white;
+        box-shadow: 0 0 0 3px {C_CARD}, 0 0 0 4px var(--diem-mau, transparent);
     }}
 
     .member-name {{ flex: 1; font-size: 1.05rem; font-weight: 600; color: {C_TEXT}; }}
 
-    .score-pill {{ padding: 6px 16px; border-radius: 999px; font-weight: 800; font-size: 0.95rem; white-space: nowrap; }}
+    .score-pill {{
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 6px 16px; border-radius: 999px; font-weight: 800; font-size: 0.95rem; white-space: nowrap;
+    }}
     .score-pill.positive {{ background: #dcfce7; color: #15803d; }}
     .score-pill.negative {{ background: #fee2e2; color: #b91c1c; }}
     .score-pill.zero {{ background: #f1f5f9; color: #475569; }}
@@ -827,11 +855,14 @@ st.markdown(f"""
 
     .badge-row {{ margin-top: 8px; }}
     .badge-chip {{
-        display: inline-block; background: #eef2ff; color: #4338ca; border-radius: 999px;
+        display: inline-block; background: linear-gradient(135deg, #eef2ff, #e0e7ff); color: #4338ca;
+        border-radius: 999px; box-shadow: 0 1px 2px rgba(67, 56, 202, 0.15);
         padding: 3px 10px; font-size: 0.72rem; font-weight: 700; margin: 3px 4px 0 0;
+        transition: transform 0.15s ease;
     }}
+    .badge-chip:hover {{ transform: translateY(-1px) scale(1.04); }}
     .podium-badges {{ margin-top: 6px; }}
-    .podium-badges .badge-chip {{ background: rgba(255,255,255,0.28); color: #ffffff; }}
+    .podium-badges .badge-chip {{ background: rgba(255,255,255,0.28); color: #ffffff; box-shadow: none; }}
 
     div[data-testid="stExpander"] {{
         border: 1px solid {C_BORDER}; border-radius: 14px; overflow: hidden; background: {C_CARD};
@@ -840,18 +871,30 @@ st.markdown(f"""
     button[kind="secondary"], button[kind="primary"], [data-testid^="stBaseButton"] {{ border-radius: 10px !important; }}
     .stButton button, .stDownloadButton button, [data-testid="stFormSubmitButton"] button {{
         background-color: {C_CARD}; color: {C_TEXT}; border: 1px solid {C_BORDER};
+        transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease;
+    }}
+    .stButton button:hover, .stDownloadButton button:hover, [data-testid="stFormSubmitButton"] button:hover {{
+        transform: translateY(-1px); border-color: #8b5cf6;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.18);
+    }}
+    .stButton button:active, .stDownloadButton button:active, [data-testid="stFormSubmitButton"] button:active {{
+        transform: translateY(0); box-shadow: none;
     }}
 
     /* --- Tab "Trang chủ" / "Cập nhật" dạng viên thuốc (pill) --- */
     [data-testid="stTab"] {{
         font-weight: 700; font-size: 1.02rem; border-radius: 999px !important;
-        padding: 6px 20px !important; transition: background 0.2s ease, color 0.2s ease;
+        padding: 6px 20px !important; transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
         cursor: pointer; color: {C_TEXT};
     }}
     [data-testid="stTab"] p {{ color: inherit; }}
+    [data-testid="stTab"]:hover:not([aria-selected="true"]) {{
+        background: {C_TRACK}; transform: translateY(-1px);
+    }}
     [data-testid="stTab"][aria-selected="true"] {{
         background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
         color: #ffffff !important;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
     }}
     [data-testid="stTab"] .react-aria-SelectionIndicator {{ display: none; }}
     [data-testid="stTabs"] [role="tablist"] {{
@@ -1029,6 +1072,22 @@ def progress_pct(diem, diem_max):
     if diem_max is None or diem_max <= 0 or diem <= 0:
         return 0
     return max(0, min(100, round(diem / diem_max * 100)))
+
+
+def mui_ten_diem(diem):
+    """Mũi tên nhỏ trước điểm số cho dễ nhìn tăng/giảm — chỉ để trang trí, không đổi số liệu."""
+    if diem > 0:
+        return "▲ "
+    if diem < 0:
+        return "▼ "
+    return ""
+
+
+def do_tre_the(idx, buoc=0.045, toi_da=0.4):
+    """Độ trễ (giây) để các thẻ xếp hạng hiện lên lần lượt từ trên xuống thay vì cùng lúc,
+    tạo cảm giác mượt mà hơn khi tải trang — giới hạn độ trễ tối đa để danh sách dài không
+    bị chờ quá lâu mới hiện hết."""
+    return min(idx * buoc, toi_da)
 
 
 def badges_html(name, diem, diem_max, recent_map, extra_class=""):
@@ -1337,7 +1396,7 @@ with tab_home:
             if not ranked:
                 st.info("Không tìm thấy thành viên nào khớp.")
 
-            for idx, row in ranked:
+            for hang_hien_thi, (idx, row) in enumerate(ranked):
                 rank = idx + 1
                 ten = row["name"]
                 diem = int(row["diem"])
@@ -1346,14 +1405,15 @@ with tab_home:
                 pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
                 chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
                 pct = progress_pct(diem, diem_max)
+                mau_ten = avatar_color(ten)
 
                 card_html = (
-                    f'<div class="rank-card {top_class}">'
+                    f'<div class="rank-card {top_class}" style="--diem-mau: {mau_ten}; animation-delay: {do_tre_the(hang_hien_thi)}s;">'
                     f'<div class="rank-card-top">'
                     f'<div class="rank-badge">{badge}</div>'
-                    f'<div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>'
+                    f'<div class="avatar" style="background: {mau_ten};">{chu_cai_dau}</div>'
                     f'<div class="member-name">{ten}</div>'
-                    f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
+                    f'<div class="score-pill {pill_class}">{mui_ten_diem(diem)}{diem:+d} điểm</div>'
                     f'</div>'
                     f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
                     f'{badges_html(ten, diem, diem_max, recent_map)}'
@@ -1380,31 +1440,32 @@ with tab_home:
                     diem = int(row["diem"])
                     chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
                     blocks_html += (
-                        f'<div class="podium-block {classes[i]}">'
+                        f'<div class="podium-block {classes[i]}" style="animation-delay: {i * 0.1}s;">'
                         f'<div class="podium-medal">{MEDALS.get(rank, "")}</div>'
                         f'<div class="podium-avatar">{chu_cai_dau}</div>'
                         f'<div class="podium-name">{ten}</div>'
-                        f'<div class="podium-score">{diem:+d} điểm</div>'
+                        f'<div class="podium-score">{mui_ten_diem(diem)}{diem:+d} điểm</div>'
                         f'{badges_html(ten, diem, diem_max, recent_map, "podium-badges")}'
                         f'</div>'
                     )
                 st.markdown(f'<div class="podium-wrap">{blocks_html}</div>', unsafe_allow_html=True)
 
-            for idx, row in rest:
+            for hang_hien_thi, (idx, row) in enumerate(rest):
                 rank = idx + 1
                 ten = row["name"]
                 diem = int(row["diem"])
                 pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
                 chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
                 pct = progress_pct(diem, diem_max)
+                mau_ten = avatar_color(ten)
 
                 card_html = (
-                    f'<div class="rank-card">'
+                    f'<div class="rank-card" style="--diem-mau: {mau_ten}; animation-delay: {do_tre_the(hang_hien_thi)}s;">'
                     f'<div class="rank-card-top">'
                     f'<div class="rank-badge">{rank}</div>'
-                    f'<div class="avatar" style="background: {avatar_color(ten)};">{chu_cai_dau}</div>'
+                    f'<div class="avatar" style="background: {mau_ten};">{chu_cai_dau}</div>'
                     f'<div class="member-name">{ten}</div>'
-                    f'<div class="score-pill {pill_class}">{diem:+d} điểm</div>'
+                    f'<div class="score-pill {pill_class}">{mui_ten_diem(diem)}{diem:+d} điểm</div>'
                     f'</div>'
                     f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
                     f'{badges_html(ten, diem, diem_max, recent_map)}'
