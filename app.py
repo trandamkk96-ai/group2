@@ -9,6 +9,7 @@ import pandas as pd
 import qrcode
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 from sqlalchemy import text
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -33,6 +34,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("17/09/2026", "🎆🧧 Thêm Tết Dương Lịch (1/1) và Tết Nguyên Đán vào hệ thống ngày lễ: 20 phút cuối trước giao thừa có drone đếm ngược phút:giây ngay trên Trang chủ, đúng giao thừa thì tự chuyển qua bắn pháo hoa suốt đêm giao thừa. Tết Nguyên Đán tự động đúng ngày cho các năm 2027, 2028, 2029 (đã tra cứu sẵn). Thêm luôn tính năng báo trước trên Trang chủ: còn 2 ngày trở xuống là tới bất kỳ ngày lễ nào đã lập trình (Giáng Sinh/20-11/Trung Thu/Tết Dương/Tết Ta) thì tự hiện thông báo đếm ngày, không cần bấm gì."),
     ("17/09/2026", "🎄🚁 Thêm trang trí theo ngày lễ: Giáng Sinh (24-25/12) có tuyết rơi cả ngày lẫn đêm, riêng ban đêm có thêm dải Ngân Hà + pháo hoa; 20/11 và Tết Trung Thu có \"trình diễn drone\" (dòng chữ phát sáng lấp lánh) hiện 2 phút/ẩn 3 phút xen kẽ đều đặn, ghi \"Chúc mừng 20/11\" hoặc \"Tết Trung Thu\". Thêm tab \"🔒 Admin\" (chỉ Admin thấy) để cưỡng chế bật bất kỳ hiệu ứng nào (thiên văn/pháo hoa/drone với chữ tuỳ ý) cho MỌI người xem bất kể ngày gì, tắt cưỡng chế là tự quay lại đúng theo ngày."),
     ("17/09/2026", "⚙️ Thêm tab \"Cài đặt\" mới (kế bên tab Góp ý) — gom 3 nút bật/tắt giao diện (Tự động theo giờ Hà Nội, Chế độ tối, Thời tiết thật tự động) vào 1 chỗ dễ tìm, khỏi cần mở thanh bên nữa — tiện hơn hẳn trên điện thoại."),
     ("17/09/2026", "🌦️ Thêm nút bật/tắt \"Thời tiết thật tự động\" (nay ở tab Cài đặt) — bật lên (mặc định) thì mây/nắng/mưa/nhật thực tự đổi theo thời tiết thật ở Mỹ Tho; tắt đi thì giao diện luôn là mây ngẫu nhiên vui mắt, không phụ thuộc thời tiết ngoài đời."),
@@ -692,14 +694,18 @@ DANG_MUA = TRANG_THAI_THOI_TIET in ("mua", "mua_to")
 # ---------------------------------------------------------------
 _NGAY_HOM_NAY = datetime.now(GIO_HA_NOI).date()
 
-# Trung Thu tính theo âm lịch nên đổi ngày dương lịch mỗi năm — bảng dưới đây chỉ ghi các năm
-# đã tra cứu chắc chắn; năm nào không có trong bảng thì Admin tự bật cưỡng chế đúng ngày là
-# được (xem tab Admin), không cần sửa code.
+# Trung Thu và Tết Nguyên Đán tính theo âm lịch nên đổi ngày dương lịch mỗi năm — 2 bảng dưới
+# đây chỉ ghi các năm đã tra cứu chắc chắn (nguồn: thuvienphapluat.vn, saptet.vn,
+# calendardate.com, famemedia.edu.vn); năm nào không có trong bảng thì Admin tự bật cưỡng chế
+# đúng ngày là được (xem tab Admin), không cần sửa code.
 _NGAY_TRUNG_THU = {2025: (10, 6), 2026: (9, 25), 2027: (9, 15)}
+_NGAY_MUNG_1_TET = {2027: (2, 6), 2028: (1, 26), 2029: (2, 13)}
 
 IS_GIANG_SINH = (_NGAY_HOM_NAY.month, _NGAY_HOM_NAY.day) in ((12, 24), (12, 25))
 IS_20_11 = (_NGAY_HOM_NAY.month, _NGAY_HOM_NAY.day) == (11, 20)
 IS_TRUNG_THU = _NGAY_TRUNG_THU.get(_NGAY_HOM_NAY.year) == (_NGAY_HOM_NAY.month, _NGAY_HOM_NAY.day)
+IS_TET_TAY = (_NGAY_HOM_NAY.month, _NGAY_HOM_NAY.day) == (1, 1)
+IS_TET_TA = _NGAY_MUNG_1_TET.get(_NGAY_HOM_NAY.year) == (_NGAY_HOM_NAY.month, _NGAY_HOM_NAY.day)
 
 # --- Cài đặt "cưỡng chế" của Admin (lưu ở database nên áp dụng cho MỌI người xem) ---
 CAI_DAT_HE_THONG = load_cai_dat_he_thong()
@@ -709,7 +715,7 @@ CUONG_CHE_DRONE = CAI_DAT_HE_THONG.get("cuong_che_drone", "") == "1"
 CUONG_CHE_DRONE_CHU = CAI_DAT_HE_THONG.get("cuong_che_drone_chu", "") or "Chào mừng!"
 
 HIEU_UNG_TUYET = IS_GIANG_SINH  # tuyết rơi cả ngày lẫn đêm dịp Giáng Sinh
-HIEU_UNG_PHAO_HOA = CUONG_CHE_PHAO_HOA or (IS_GIANG_SINH and dark_mode)  # pháo hoa: đêm Giáng Sinh, hoặc Admin ép
+HIEU_UNG_PHAO_HOA = CUONG_CHE_PHAO_HOA or (IS_GIANG_SINH and dark_mode) or IS_TET_TAY or IS_TET_TA
 HIEU_UNG_DRONE = CUONG_CHE_DRONE or IS_20_11 or IS_TRUNG_THU
 if CUONG_CHE_DRONE:
     NOI_DUNG_DRONE = CUONG_CHE_DRONE_CHU
@@ -719,6 +725,81 @@ elif IS_TRUNG_THU:
     NOI_DUNG_DRONE = "Tết Trung Thu"
 else:
     NOI_DUNG_DRONE = ""
+
+
+# ---------------------------------------------------------------
+# ĐẾM NGƯỢC GIAO THỪA (Tết Dương Lịch & Tết Nguyên Đán) — 20 phút cuối trước giao thừa hiện
+# "drone" đếm ngược phút:giây, đúng khoảnh khắc giao thừa thì chuyển qua bắn pháo hoa (dùng
+# lại đúng hiệu ứng HIEU_UNG_PHAO_HOA ở trên, vì IS_TET_TAY/IS_TET_TA đã bật pháo hoa nguyên
+# ngày hôm đó rồi).
+# ---------------------------------------------------------------
+def _ngay_toi_gan_nhat(thang, ngay, hom_nay):
+    """Ngày dương lịch (tháng/ngày cố định hằng năm, VD 1/1, 24/12) SẮP TỚI gần nhất tính từ
+    hôm nay — nếu ngày đó năm nay đã qua rồi thì tự lấy ngày đó của năm SAU."""
+    ung_vien = date(hom_nay.year, thang, ngay)
+    if ung_vien < hom_nay:
+        ung_vien = date(hom_nay.year + 1, thang, ngay)
+    return ung_vien
+
+
+def _ngay_am_lich_toi_gan_nhat(bang_tra_cuu, hom_nay):
+    """Cho ngày lễ tính theo âm lịch (Trung Thu, Tết Ta) — tra trong bảng năm đã tra cứu sẵn,
+    trả về ngày SẮP TỚI gần nhất; None nếu năm đó (và năm sau) chưa có trong bảng."""
+    for nam in (hom_nay.year, hom_nay.year + 1):
+        if nam in bang_tra_cuu:
+            ung_vien = date(nam, *bang_tra_cuu[nam])
+            if ung_vien >= hom_nay:
+                return ung_vien
+    return None
+
+
+NGAY_GIANG_SINH_TOI = _ngay_toi_gan_nhat(12, 24, _NGAY_HOM_NAY)
+NGAY_20_11_TOI = _ngay_toi_gan_nhat(11, 20, _NGAY_HOM_NAY)
+NGAY_TRUNG_THU_TOI = _ngay_am_lich_toi_gan_nhat(_NGAY_TRUNG_THU, _NGAY_HOM_NAY)
+NGAY_TET_TAY_TOI = _ngay_toi_gan_nhat(1, 1, _NGAY_HOM_NAY)
+NGAY_TET_TA_TOI = _ngay_am_lich_toi_gan_nhat(_NGAY_MUNG_1_TET, _NGAY_HOM_NAY)
+
+# Báo trước 2 ngày lên Trang chủ cho MỌI ngày lễ đã lập trình sẵn (kể cả đúng hôm nay là ngày
+# lễ luôn — còn 0 ngày).
+_CAC_NGAY_LE_DA_LAP_TRINH = [
+    ("🎄 Giáng Sinh", NGAY_GIANG_SINH_TOI),
+    ("📖 Ngày Nhà giáo Việt Nam 20/11", NGAY_20_11_TOI),
+    ("🥮 Tết Trung Thu", NGAY_TRUNG_THU_TOI),
+    ("🎆 Tết Dương Lịch", NGAY_TET_TAY_TOI),
+    ("🧧 Tết Nguyên Đán", NGAY_TET_TA_TOI),
+]
+LE_SAP_TOI_TRANG_CHU = [
+    (ten, ngay, (ngay - _NGAY_HOM_NAY).days)
+    for ten, ngay in _CAC_NGAY_LE_DA_LAP_TRINH
+    if ngay is not None and 0 <= (ngay - _NGAY_HOM_NAY).days <= 2
+]
+
+_BAY_GIO = datetime.now(GIO_HA_NOI)
+
+
+def _giay_con_lai_toi_giao_thua(ngay_toi):
+    """Số giây còn lại tính đến 0h00 của ngày giao thừa cho trước (None nếu chưa có ngày)."""
+    if ngay_toi is None:
+        return None
+    giao_thua = datetime(ngay_toi.year, ngay_toi.month, ngay_toi.day, 0, 0, 0, tzinfo=GIO_HA_NOI)
+    return (giao_thua - _BAY_GIO).total_seconds()
+
+
+_GIAY_CON_LAI_TET_TAY = _giay_con_lai_toi_giao_thua(NGAY_TET_TAY_TOI)
+_GIAY_CON_LAI_TET_TA = _giay_con_lai_toi_giao_thua(NGAY_TET_TA_TOI)
+
+if _GIAY_CON_LAI_TET_TAY is not None and 0 < _GIAY_CON_LAI_TET_TAY <= 1200:
+    HIEU_UNG_DEM_NGUOC_GIAO_THUA = True
+    GIAY_CON_LAI_GIAO_THUA = int(_GIAY_CON_LAI_TET_TAY)
+    TEN_GIAO_THUA_DEM_NGUOC = f"Giao Thừa Tết Dương Lịch {NGAY_TET_TAY_TOI.year}"
+elif _GIAY_CON_LAI_TET_TA is not None and 0 < _GIAY_CON_LAI_TET_TA <= 1200:
+    HIEU_UNG_DEM_NGUOC_GIAO_THUA = True
+    GIAY_CON_LAI_GIAO_THUA = int(_GIAY_CON_LAI_TET_TA)
+    TEN_GIAO_THUA_DEM_NGUOC = f"Giao Thừa Tết Nguyên Đán {NGAY_TET_TA_TOI.year}"
+else:
+    HIEU_UNG_DEM_NGUOC_GIAO_THUA = False
+    GIAY_CON_LAI_GIAO_THUA = 0
+    TEN_GIAO_THUA_DEM_NGUOC = ""
 
 
 def pha_mat_trang(ngay):
@@ -1847,6 +1928,62 @@ with tab_home:
         unsafe_allow_html=True,
     )
 
+    # --- Báo trước ngày lễ (còn 0-2 ngày nữa là tới) — Giáng Sinh / 20-11 / Trung Thu /
+    # Tết Dương Lịch / Tết Nguyên Đán, tự tính theo ngày hôm nay, không cần Admin bật gì cả.
+    for _ten_le, _ngay_le, _con_lai in LE_SAP_TOI_TRANG_CHU:
+        if _con_lai == 0:
+            st.success(f"🎉 Hôm nay là {_ten_le}! Chúc mừng cả nhóm nhé!")
+        else:
+            st.info(
+                f"⏳ Còn {_con_lai} ngày nữa là tới {_ten_le} "
+                f"({_ngay_le.strftime('%d/%m/%Y')}) — sắp vui rồi đó!"
+            )
+
+    # --- Đếm ngược Giao Thừa (20 phút cuối trước Tết Dương Lịch hoặc Tết Nguyên Đán) — cần
+    # 1 chút JavaScript RẤT nhẹ (chỉ để đổi số mỗi giây) vì CSS thuần không hiển thị được số
+    # phút:giây chạy thật; dùng components.html để script này thật sự chạy được (st.markdown
+    # thường KHÔNG cho script chạy).
+    if HIEU_UNG_DEM_NGUOC_GIAO_THUA:
+        _ten_giao_thua_an_toan = html.escape(TEN_GIAO_THUA_DEM_NGUOC)
+        components.html(
+            f"""
+            <div style="font-family:'Be Vietnam Pro',system-ui,sans-serif; text-align:center;
+                        padding:14px 10px; border-radius:16px; margin:4px 0 10px 0;
+                        background:linear-gradient(135deg,#1e1b4b,#4c1d95);
+                        box-shadow:0 4px 18px rgba(0,0,0,0.25);">
+                <div style="color:#e9d5ff; font-size:0.95rem; font-weight:600; letter-spacing:.03em;">
+                    🚁✨ Drone đếm ngược đến {_ten_giao_thua_an_toan}
+                </div>
+                <div id="dem-nguoc-giao-thua-so"
+                     style="color:#fff; font-size:2.6rem; font-weight:800; letter-spacing:.05em;
+                            text-shadow:0 0 14px #a78bfa, 0 0 28px #a78bfa; margin-top:4px;">
+                    --:--
+                </div>
+            </div>
+            <script>
+                (function() {{
+                    var conLai = {GIAY_CON_LAI_GIAO_THUA};
+                    var el = document.getElementById("dem-nguoc-giao-thua-so");
+                    function capNhat() {{
+                        if (conLai <= 0) {{
+                            el.textContent = "🎉 GIAO THỪA! 🎆";
+                            clearInterval(bo_dem);
+                            return;
+                        }}
+                        var phut = Math.floor(conLai / 60);
+                        var giay = conLai % 60;
+                        el.textContent =
+                            (phut < 10 ? "0" : "") + phut + ":" + (giay < 10 ? "0" : "") + giay;
+                        conLai -= 1;
+                    }}
+                    capNhat();
+                    var bo_dem = setInterval(capNhat, 1000);
+                }})();
+            </script>
+            """,
+            height=130,
+        )
+
     # --- "Hôm nay / Ngày mai học gì" — tự lấy từ tab Thời khóa biểu theo giờ Hà Nội.
     # Sau 11h45 sáng (buổi học đã xong) thì tự chuyển sang hiện lịch của NGÀY MAI luôn,
     # để chuẩn bị trước cho hôm sau thay vì cứ hiện lịch hôm nay đã học xong rồi.
@@ -2501,9 +2638,20 @@ if is_admin:
             "🎄 Giáng Sinh" if IS_GIANG_SINH
             else "📖 Ngày Nhà giáo Việt Nam 20/11" if IS_20_11
             else "🥮 Tết Trung Thu" if IS_TRUNG_THU
+            else "🎆 Tết Dương Lịch" if IS_TET_TAY
+            else "🧧 Tết Nguyên Đán" if IS_TET_TA
             else "Ngày thường (không có dịp lễ nào được lập trình sẵn)"
         )
         st.caption(f"📅 Hôm nay {_NGAY_HOM_NAY.strftime('%d/%m/%Y')} — {_ten_dip_hom_nay}")
+        if HIEU_UNG_DEM_NGUOC_GIAO_THUA:
+            st.caption(f"🚁 Đang trong 20 phút đếm ngược tới {TEN_GIAO_THUA_DEM_NGUOC} — xem ở tab Trang chủ.")
+        st.caption(
+            "💡 Tết Dương Lịch (1/1) và Tết Nguyên Đán đã tự có pháo hoa + drone đếm ngược 20 "
+            "phút cuối trước giao thừa, không cần cưỡng chế gì thêm. Tết Nguyên Đán tự động đúng "
+            "ngày cho các năm 2027, 2028, 2029 (đã tra cứu sẵn) — năm khác thì các nút cưỡng chế "
+            "ở trên vẫn dùng được cho pháo hoa/drone (riêng phần đếm ngược 20 phút thì chưa có "
+            "nút cưỡng chế, nói mình biết nếu bạn cần thêm nhé)."
+        )
 
         st.write("")
         st.markdown("##### 🌌 Hiện tượng thiên văn")
