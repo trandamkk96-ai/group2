@@ -33,6 +33,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("17/09/2026", "🎄🚁 Thêm trang trí theo ngày lễ: Giáng Sinh (24-25/12) có tuyết rơi cả ngày lẫn đêm, riêng ban đêm có thêm dải Ngân Hà + pháo hoa; 20/11 và Tết Trung Thu có \"trình diễn drone\" (dòng chữ phát sáng lấp lánh) hiện 2 phút/ẩn 3 phút xen kẽ đều đặn, ghi \"Chúc mừng 20/11\" hoặc \"Tết Trung Thu\". Thêm tab \"🔒 Admin\" (chỉ Admin thấy) để cưỡng chế bật bất kỳ hiệu ứng nào (thiên văn/pháo hoa/drone với chữ tuỳ ý) cho MỌI người xem bất kể ngày gì, tắt cưỡng chế là tự quay lại đúng theo ngày."),
     ("17/09/2026", "⚙️ Thêm tab \"Cài đặt\" mới (kế bên tab Góp ý) — gom 3 nút bật/tắt giao diện (Tự động theo giờ Hà Nội, Chế độ tối, Thời tiết thật tự động) vào 1 chỗ dễ tìm, khỏi cần mở thanh bên nữa — tiện hơn hẳn trên điện thoại."),
     ("17/09/2026", "🌦️ Thêm nút bật/tắt \"Thời tiết thật tự động\" (nay ở tab Cài đặt) — bật lên (mặc định) thì mây/nắng/mưa/nhật thực tự đổi theo thời tiết thật ở Mỹ Tho; tắt đi thì giao diện luôn là mây ngẫu nhiên vui mắt, không phụ thuộc thời tiết ngoài đời."),
     ("17/09/2026", "➕➖ Mục \"Xem lịch sử\" của mỗi thành viên giờ có thêm 2 ô tổng kết ngay phía trên bảng: tổng số điểm ĐƯỢC CỘNG và tổng số điểm BỊ TRỪ (kèm số lần), khỏi cần tự cộng trừ từng dòng nữa."),
@@ -109,6 +110,16 @@ def init_db():
                 ngay_thi DATE NOT NULL,
                 ghi_chu TEXT,
                 ngay_dang TIMESTAMP NOT NULL DEFAULT now()
+            )
+        """))
+        # Bảng cài đặt hệ thống kiểu khoá/giá trị — dùng cho các nút "cưỡng chế" của Admin
+        # (bật ép hiệu ứng thiên văn/pháo hoa/trình diễn ánh sáng cho MỌI người xem, không chỉ
+        # riêng trình duyệt của Admin) nên phải lưu ở database, không thể lưu tạm kiểu
+        # session_state (session_state chỉ riêng 1 người, 1 trình duyệt).
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS cai_dat_he_thong (
+                khoa TEXT PRIMARY KEY,
+                gia_tri TEXT
             )
         """))
         s.commit()
@@ -432,6 +443,29 @@ def load_feedback_da_tra_loi():
     )
 
 
+@st.cache_data(ttl=5, show_spinner=False)
+def load_cai_dat_he_thong():
+    """Đọc toàn bộ cài đặt "cưỡng chế" của Admin (hiệu ứng thiên văn/pháo hoa/trình diễn ánh
+    sáng ép bật cho MỌI người xem) thành 1 dict {khoa: gia_tri}. Cache 5 giây — nhiều người
+    xem cùng lúc không dồn hết vào database, mà Admin bấm đổi vẫn thấy hiệu lực gần như ngay."""
+    df = conn.query("SELECT khoa, gia_tri FROM cai_dat_he_thong", ttl=0)
+    return dict(zip(df["khoa"], df["gia_tri"])) if not df.empty else {}
+
+
+def luu_cai_dat_he_thong(khoa, gia_tri):
+    """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi)."""
+    with conn.session as s:
+        s.execute(
+            text(
+                "INSERT INTO cai_dat_he_thong (khoa, gia_tri) VALUES (:khoa, :gt) "
+                "ON CONFLICT (khoa) DO UPDATE SET gia_tri = :gt"
+            ),
+            {"khoa": khoa, "gt": gia_tri},
+        )
+        s.commit()
+    load_cai_dat_he_thong.clear()
+
+
 def add_news(noi_dung):
     """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi)."""
     with conn.session as s:
@@ -651,6 +685,41 @@ TRANG_THAI_THOI_TIET = lay_thoi_tiet_my_tho() if tu_dong_thoi_tiet else None
 # None -> dùng mây ngẫu nhiên (dù là vì tắt nút "Thời tiết thật tự động" hay vì gọi API lỗi).
 DANG_MUA = TRANG_THAI_THOI_TIET in ("mua", "mua_to")
 
+# ---------------------------------------------------------------
+# NGÀY LỄ ĐẶC BIỆT — tự động thêm hiệu ứng trang trí riêng cho vài dịp trong năm, cộng thêm
+# nút "cưỡng chế" cho Admin (bật ép hiệu ứng bất kỳ lúc nào, cho MỌI người xem — xem tab
+# "🔒 Admin"), tắt cưỡng chế thì tự quay về đúng theo ngày như bình thường.
+# ---------------------------------------------------------------
+_NGAY_HOM_NAY = datetime.now(GIO_HA_NOI).date()
+
+# Trung Thu tính theo âm lịch nên đổi ngày dương lịch mỗi năm — bảng dưới đây chỉ ghi các năm
+# đã tra cứu chắc chắn; năm nào không có trong bảng thì Admin tự bật cưỡng chế đúng ngày là
+# được (xem tab Admin), không cần sửa code.
+_NGAY_TRUNG_THU = {2025: (10, 6), 2026: (9, 25), 2027: (9, 15)}
+
+IS_GIANG_SINH = (_NGAY_HOM_NAY.month, _NGAY_HOM_NAY.day) in ((12, 24), (12, 25))
+IS_20_11 = (_NGAY_HOM_NAY.month, _NGAY_HOM_NAY.day) == (11, 20)
+IS_TRUNG_THU = _NGAY_TRUNG_THU.get(_NGAY_HOM_NAY.year) == (_NGAY_HOM_NAY.month, _NGAY_HOM_NAY.day)
+
+# --- Cài đặt "cưỡng chế" của Admin (lưu ở database nên áp dụng cho MỌI người xem) ---
+CAI_DAT_HE_THONG = load_cai_dat_he_thong()
+CUONG_CHE_THIEN_VAN = CAI_DAT_HE_THONG.get("cuong_che_thien_van", "")  # "" / sao_bang / sao_choi / ngan_ha
+CUONG_CHE_PHAO_HOA = CAI_DAT_HE_THONG.get("cuong_che_phao_hoa", "") == "1"
+CUONG_CHE_DRONE = CAI_DAT_HE_THONG.get("cuong_che_drone", "") == "1"
+CUONG_CHE_DRONE_CHU = CAI_DAT_HE_THONG.get("cuong_che_drone_chu", "") or "Chào mừng!"
+
+HIEU_UNG_TUYET = IS_GIANG_SINH  # tuyết rơi cả ngày lẫn đêm dịp Giáng Sinh
+HIEU_UNG_PHAO_HOA = CUONG_CHE_PHAO_HOA or (IS_GIANG_SINH and dark_mode)  # pháo hoa: đêm Giáng Sinh, hoặc Admin ép
+HIEU_UNG_DRONE = CUONG_CHE_DRONE or IS_20_11 or IS_TRUNG_THU
+if CUONG_CHE_DRONE:
+    NOI_DUNG_DRONE = CUONG_CHE_DRONE_CHU
+elif IS_20_11:
+    NOI_DUNG_DRONE = "Chúc mừng 20/11"
+elif IS_TRUNG_THU:
+    NOI_DUNG_DRONE = "Tết Trung Thu"
+else:
+    NOI_DUNG_DRONE = ""
+
 
 def pha_mat_trang(ngay):
     """Mặt trăng đổi hình dạng dần theo chu kỳ trăng thật (~29.53 ngày), tính từ 1 mốc
@@ -675,7 +744,13 @@ _TEN_HIEN_TUONG_THEO_THU = {
 def hien_tuong_thien_van_hom_nay():
     """Mỗi ngày trong tuần có 1 hiện tượng thiên văn riêng cho Chế độ tối — đổi đều đặn
     theo thứ trong tuần (giờ Hà Nội), ai mở web cùng ngày cũng thấy giống nhau:
-    Thứ 2 = dải Ngân Hà, các ngày còn lại xen kẽ sao băng / sao chổi."""
+    Thứ 2 = dải Ngân Hà, các ngày còn lại xen kẽ sao băng / sao chổi.
+    Admin cưỡng chế (CUONG_CHE_THIEN_VAN) thì LUÔN thắng; kế đến là đêm Giáng Sinh (luôn dải
+    Ngân Hà); còn không thì mới tính theo thứ trong tuần như bình thường."""
+    if CUONG_CHE_THIEN_VAN in ("sao_bang", "sao_choi", "ngan_ha"):
+        return CUONG_CHE_THIEN_VAN
+    if IS_GIANG_SINH:
+        return "ngan_ha"
     return _TEN_HIEN_TUONG_THEO_THU[datetime.now(GIO_HA_NOI).weekday()]
 
 
@@ -1470,6 +1545,144 @@ if DANG_MUA:
     """, unsafe_allow_html=True)
 
 
+# ---------------------------------------------------------------------------
+# TUYẾT RƠI (dịp Giáng Sinh 24-25/12, hiện cả ngày lẫn đêm, không phân biệt Chế độ tối/sáng) —
+# thuần CSS: nhiều <div> bông tuyết, mỗi bông rơi từ trên xuống + đung đưa nhẹ 2 bên rồi lặp
+# lại (animation-delay ÂM để mỗi bông vào giữa hoạt ảnh ngay từ đầu, khỏi phải chờ rơi hết 1
+# vòng mới thấy đẹp), không cần JavaScript nên vẫn rất nhẹ trên điện thoại yếu.
+# ---------------------------------------------------------------------------
+if HIEU_UNG_TUYET:
+    def _tao_tuyet_roi():
+        SO_BONG_TUYET = 45
+        parts = []
+        for _ in range(SO_BONG_TUYET):
+            size = round(random.uniform(3, 7), 1)
+            left = round(random.uniform(0, 100), 1)
+            duration = round(random.uniform(7, 16), 1)
+            delay = round(random.uniform(-16, 0), 1)
+            do_mo = round(random.uniform(0.5, 0.95), 2)
+            parts.append(
+                f'<div class="snowflake" style="left:{left}vw; width:{size}px; height:{size}px; '
+                f'opacity:{do_mo}; animation-duration:{duration}s; animation-delay:{delay}s;"></div>'
+            )
+        return "".join(parts)
+
+    TUYET_HTML = _tao_tuyet_roi()
+    st.markdown(f"""
+    <style>
+        .snowflake {{
+            position: fixed; top: -10px; z-index: -1; pointer-events: none;
+            background: #ffffff; border-radius: 50%;
+            box-shadow: 0 0 4px rgba(255,255,255,0.85);
+            animation-name: tuyet-roi; animation-timing-function: linear; animation-iteration-count: infinite;
+        }}
+        @keyframes tuyet-roi {{
+            0% {{ transform: translate(0, 0); }}
+            25% {{ transform: translate(12px, 27vh); }}
+            50% {{ transform: translate(-10px, 54vh); }}
+            75% {{ transform: translate(14px, 81vh); }}
+            100% {{ transform: translate(0, 110vh); }}
+        }}
+        @media (prefers-reduced-motion: reduce) {{
+            .snowflake {{ animation: none !important; opacity: 0.25 !important; top: 20vh; }}
+        }}
+    </style>
+    <div>{TUYET_HTML}</div>
+    """, unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# PHÁO HOA (đêm Giáng Sinh, hoặc bất kỳ lúc nào Admin cưỡng chế bật) — kỹ thuật box-shadow:
+# nhiều "tia lửa" đặt quanh 1 tâm bằng box-shadow, rồi cả cụm phóng to dần + mờ dần bằng
+# transform: scale()/opacity — vì tia lửa nằm trong box-shadow của CHÍNH phần tử bị scale nên
+# tự giãn ra theo, tạo cảm giác nổ tung thật sự mà không cần JavaScript.
+# ---------------------------------------------------------------------------
+if HIEU_UNG_PHAO_HOA:
+    def _tao_phao_hoa():
+        MAU_PHAO = ["#f87171", "#fbbf24", "#34d399", "#60a5fa", "#e879f9", "#fb923c", "#facc15"]
+        SO_QUA = 6
+        SO_TIA = 14
+        parts = []
+        for i in range(SO_QUA):
+            mau = random.choice(MAU_PHAO)
+            tia = ", ".join(
+                f"{round(26 * math.cos(2 * math.pi * j / SO_TIA), 1)}px "
+                f"{round(26 * math.sin(2 * math.pi * j / SO_TIA), 1)}px 0 1.5px {mau}"
+                for j in range(SO_TIA)
+            )
+            top = round(random.uniform(8, 45), 1)
+            left = round(random.uniform(10, 90), 1)
+            delay = round(i * (30 / SO_QUA) + random.uniform(0, 2), 2)
+            parts.append(
+                f'<div class="phao-hoa" style="top:{top}vh; left:{left}vw; '
+                f'animation-delay:{delay}s; box-shadow:{tia}; background:{mau};"></div>'
+            )
+        return "".join(parts)
+
+    PHAO_HOA_HTML = _tao_phao_hoa()
+    st.markdown(f"""
+    <style>
+        .phao-hoa {{
+            position: fixed; z-index: -1; pointer-events: none;
+            width: 3px; height: 3px; border-radius: 50%;
+            transform: scale(0); opacity: 0;
+            animation: no-phao 6s ease-out infinite;
+        }}
+        @keyframes no-phao {{
+            0% {{ transform: scale(0); opacity: 0; }}
+            3% {{ transform: scale(0.2); opacity: 1; }}
+            18% {{ transform: scale(1); opacity: 1; }}
+            45% {{ transform: scale(1.4); opacity: 0; }}
+            100% {{ transform: scale(1.4); opacity: 0; }}
+        }}
+        @media (prefers-reduced-motion: reduce) {{
+            .phao-hoa {{ animation: none !important; opacity: 0 !important; }}
+        }}
+    </style>
+    <div>{PHAO_HOA_HTML}</div>
+    """, unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# "TRÌNH DIỄN DRONE" (20/11, Tết Trung Thu, hoặc Admin cưỡng chế với chữ tuỳ ý) — đơn giản hoá
+# thành dòng chữ phát sáng lấp lánh xuất hiện đều đặn (mô phỏng đội hình drone thật từng chữ một
+# thì cần JavaScript rất nặng máy, không hợp với điện thoại yếu nên chọn cách này để vẫn đẹp mà
+# nhẹ). Hiện 2 phút rồi ẩn 3 phút, lặp lại mỗi 5 phút — đúng nhịp người dùng yêu cầu.
+# ---------------------------------------------------------------------------
+if HIEU_UNG_DRONE and NOI_DUNG_DRONE:
+    _noi_dung_drone_an_toan = html.escape(NOI_DUNG_DRONE)
+    st.markdown(f"""
+    <style>
+        .drone-banner {{
+            position: fixed; top: 9vh; left: 50%; transform: translateX(-50%);
+            z-index: -1; pointer-events: none; text-align: center; max-width: 92vw;
+            font-size: clamp(1.15rem, 4.2vw, 2.3rem); font-weight: 800; letter-spacing: 0.06em;
+            color: #ffffff; white-space: nowrap;
+            animation: drone-hien 300s linear infinite;
+        }}
+        .drone-banner span {{
+            display: inline-block;
+            animation: drone-lap-lanh 1.6s ease-in-out infinite;
+        }}
+        @keyframes drone-hien {{
+            0% {{ opacity: 0; }}
+            1% {{ opacity: 1; }}
+            39% {{ opacity: 1; }}
+            41% {{ opacity: 0; }}
+            100% {{ opacity: 0; }}
+        }}
+        @keyframes drone-lap-lanh {{
+            0%, 100% {{ text-shadow: 0 0 10px #60a5fa, 0 0 22px #60a5fa, 0 0 36px #a78bfa; }}
+            50% {{ text-shadow: 0 0 16px #fbbf24, 0 0 30px #fbbf24, 0 0 48px #f472b6; }}
+        }}
+        @media (prefers-reduced-motion: reduce) {{
+            .drone-banner {{ animation: none !important; opacity: 0 !important; }}
+        }}
+    </style>
+    <div class="drone-banner"><span>✨ {_noi_dung_drone_an_toan} ✨</span></div>
+    """, unsafe_allow_html=True)
+
+
 AVATAR_COLORS = ["#6366f1", "#8b5cf6", "#ec4899", "#f97316", "#10b981", "#0ea5e9", "#eab308"]
 
 
@@ -1610,11 +1823,17 @@ else:
 
 
 # ---------------------------------------------------------------
-# 6 TAB CHÍNH: Trang chủ / Thời khóa biểu / Tin tức / Cập nhật / Góp ý / Cài đặt
+# CÁC TAB CHÍNH: Trang chủ / Thời khóa biểu / Tin tức / Cập nhật / Góp ý / Cài đặt
+# (+ tab "🔒 Admin" chỉ hiện thêm khi đã đăng nhập đúng mật khẩu Admin)
 # ---------------------------------------------------------------
-tab_home, tab_tkb, tab_news, tab_update, tab_feedback, tab_settings = st.tabs(
-    ["🏠 Trang chủ", "📅 Thời khóa biểu", "📰 Tin tức", "🆕 Cập nhật", "💬 Góp ý", "⚙️ Cài đặt"]
-)
+_ten_cac_tab = ["🏠 Trang chủ", "📅 Thời khóa biểu", "📰 Tin tức", "🆕 Cập nhật", "💬 Góp ý", "⚙️ Cài đặt"]
+if is_admin:
+    _ten_cac_tab.append("🔒 Admin")
+    (
+        tab_home, tab_tkb, tab_news, tab_update, tab_feedback, tab_settings, tab_admin,
+    ) = st.tabs(_ten_cac_tab)
+else:
+    tab_home, tab_tkb, tab_news, tab_update, tab_feedback, tab_settings = st.tabs(_ten_cac_tab)
 
 # =================================================================
 # TAB 1 — TRANG CHỦ (toàn bộ nội dung cũ: điểm, xếp hạng, form, v.v.)
@@ -2258,3 +2477,93 @@ with tab_settings:
             st.caption("📍 Chưa lấy được thời tiết thật (mạng lỗi/API sập) — đang tạm dùng mây ngẫu nhiên.")
     else:
         st.caption("📍 Đang tắt — giao diện luôn hiện mây ngẫu nhiên, không phụ thuộc thời tiết ngoài đời.")
+
+
+# =================================================================
+# TAB "🔒 Admin" — chỉ hiện khi đã đăng nhập đúng mật khẩu Admin. Cho phép CƯỠNG CHẾ bật
+# hiệu ứng thiên văn / pháo hoa / trình diễn drone cho MỌI người xem trang, bất kể hôm nay là
+# ngày gì — lưu ở database (bảng cai_dat_he_thong) nên áp dụng ngay cho tất cả mọi trình duyệt,
+# không riêng gì máy của Admin. Tắt cưỡng chế đi thì web tự quay về đúng theo ngày như bình
+# thường (Giáng Sinh/20-11/Trung Thu tự động, ngày thường thì không có hiệu ứng gì thêm).
+# =================================================================
+if is_admin:
+    with tab_admin:
+        st.markdown(
+            '<div class="tab-hero settings">'
+            '<div class="tab-hero-title">🔒 Admin — Cưỡng chế hiệu ứng</div>'
+            '<div class="tab-hero-subtitle">Ép bật hiệu ứng cho MỌI người xem trang, bất kể hôm nay '
+            'là ngày gì — bấm là áp dụng ngay lập tức. Tắt cưỡng chế thì web tự quay về đúng theo '
+            'ngày như bình thường.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        _ten_dip_hom_nay = (
+            "🎄 Giáng Sinh" if IS_GIANG_SINH
+            else "📖 Ngày Nhà giáo Việt Nam 20/11" if IS_20_11
+            else "🥮 Tết Trung Thu" if IS_TRUNG_THU
+            else "Ngày thường (không có dịp lễ nào được lập trình sẵn)"
+        )
+        st.caption(f"📅 Hôm nay {_NGAY_HOM_NAY.strftime('%d/%m/%Y')} — {_ten_dip_hom_nay}")
+
+        st.write("")
+        st.markdown("##### 🌌 Hiện tượng thiên văn")
+        st.caption("Chỉ thấy được khi web đang ở 🌙 Chế độ tối. Mặc định (Tự động) thì đổi theo thứ trong tuần, riêng đêm Giáng Sinh luôn là dải Ngân Hà.")
+        _TUY_CHON_THIEN_VAN = {
+            "": "🔄 Tự động (theo ngày)",
+            "sao_bang": "🌠 Ép: Sao băng",
+            "sao_choi": "☄️ Ép: Sao chổi",
+            "ngan_ha": "🌌 Ép: Dải Ngân Hà",
+        }
+        _ds_khoa_thien_van = list(_TUY_CHON_THIEN_VAN.keys())
+        _lua_chon_thien_van = st.selectbox(
+            "Cưỡng chế hiện tượng thiên văn:",
+            options=_ds_khoa_thien_van,
+            format_func=lambda k: _TUY_CHON_THIEN_VAN[k],
+            index=_ds_khoa_thien_van.index(CUONG_CHE_THIEN_VAN if CUONG_CHE_THIEN_VAN in _ds_khoa_thien_van else ""),
+            key="chon_cuong_che_thien_van",
+        )
+        if _lua_chon_thien_van != CUONG_CHE_THIEN_VAN:
+            luu_cai_dat_he_thong("cuong_che_thien_van", _lua_chon_thien_van)
+            st.rerun()
+
+        st.write("")
+        st.markdown("##### 🎆 Pháo hoa")
+        _bat_phao_hoa = st.toggle(
+            "Cưỡng chế bật pháo hoa (mọi lúc, cho mọi người xem)",
+            value=CUONG_CHE_PHAO_HOA,
+            key="chon_cuong_che_phao_hoa",
+        )
+        if _bat_phao_hoa != CUONG_CHE_PHAO_HOA:
+            luu_cai_dat_he_thong("cuong_che_phao_hoa", "1" if _bat_phao_hoa else "")
+            st.rerun()
+
+        st.write("")
+        st.markdown("##### 🚁 Trình diễn drone")
+        st.caption(
+            "Mô phỏng đơn giản thành dòng chữ phát sáng lấp lánh (không vẽ từng con drone thật vì "
+            "sẽ rất nặng máy trên điện thoại yếu) — hiện 2 phút rồi ẩn 3 phút, lặp lại đều đặn."
+        )
+        _bat_drone = st.toggle(
+            "Cưỡng chế bật trình diễn drone (mọi lúc, cho mọi người xem)",
+            value=CUONG_CHE_DRONE,
+            key="chon_cuong_che_drone",
+        )
+        _chu_drone_nhap = st.text_input(
+            "Nội dung hiển thị:",
+            value=CUONG_CHE_DRONE_CHU,
+            key="chon_cuong_che_drone_chu",
+            disabled=not _bat_drone,
+            max_chars=60,
+        )
+        _chu_drone_luu = _chu_drone_nhap.strip() or "Chào mừng!"
+        if _bat_drone != CUONG_CHE_DRONE or (_bat_drone and _chu_drone_luu != CUONG_CHE_DRONE_CHU):
+            luu_cai_dat_he_thong("cuong_che_drone", "1" if _bat_drone else "")
+            luu_cai_dat_he_thong("cuong_che_drone_chu", _chu_drone_luu)
+            st.rerun()
+
+        st.write("")
+        st.caption(
+            "💡 Tết Trung Thu tự động đúng ngày cho các năm 2025, 2026, 2027 (đã tra cứu sẵn theo "
+            "âm lịch) — năm khác thì vào đúng ngày Trung Thu năm đó, bật cưỡng chế ở trên là được, "
+            "khỏi cần sửa code."
+        )
