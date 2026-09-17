@@ -33,6 +33,8 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("17/09/2026", "⚙️ Thêm tab \"Cài đặt\" mới (kế bên tab Góp ý) — gom 3 nút bật/tắt giao diện (Tự động theo giờ Hà Nội, Chế độ tối, Thời tiết thật tự động) vào 1 chỗ dễ tìm, khỏi cần mở thanh bên nữa — tiện hơn hẳn trên điện thoại."),
+    ("17/09/2026", "🌦️ Thêm nút bật/tắt \"Thời tiết thật tự động\" (nay ở tab Cài đặt) — bật lên (mặc định) thì mây/nắng/mưa/nhật thực tự đổi theo thời tiết thật ở Mỹ Tho; tắt đi thì giao diện luôn là mây ngẫu nhiên vui mắt, không phụ thuộc thời tiết ngoài đời."),
     ("17/09/2026", "➕➖ Mục \"Xem lịch sử\" của mỗi thành viên giờ có thêm 2 ô tổng kết ngay phía trên bảng: tổng số điểm ĐƯỢC CỘNG và tổng số điểm BỊ TRỪ (kèm số lần), khỏi cần tự cộng trừ từng dòng nữa."),
     ("17/09/2026", "🌦️ Mưa/giông bão chân thật hơn: mưa giờ có 2 lớp hạt (gần to rõ, xa nhỏ mờ) nhìn có chiều sâu hơn hẳn; trời mưa thì mây dày + xám đậm hơn, mặt trời mờ hẳn xuống, và tắt luôn nhật thực (mưa mù thì làm sao thấy được); riêng lúc GIÔNG BÃO còn tối hơn nữa, mây đen kịt và có chớp sét lóe sáng đều 20 lần/phút."),
     ("17/09/2026", "☀️ Nhật thực giờ vào trang chỉ 2 giây là bắt đầu che luôn (khỏi phải đợi lâu mới thấy), rồi tự chuyển động liên tục không dừng khựng giữa chừng: 2 phút che vào, 2 phút che ra, 2 phút nắng đẹp, rồi lặp lại đều đặn — đĩa che tròn y hệt mặt trăng, khuyết dần từ bên phải, che kín đúng khoảnh khắc thì lóe vành nhật hoa lên và cả bầu trời tối sầm như Chế độ tối, rồi đi tiếp luôn để sáng dần trở lại cũng từ bên phải (không quay đầu, giống mặt trăng thật đi ngang qua một lượt)."),
@@ -578,20 +580,17 @@ def _ngay_hien_thi_tkb_ha_noi():
     return nhan, _TEN_THU_VN[ngay_hien_thi.weekday()]
 
 
-auto_theme = st.sidebar.toggle(
-    "🕒 Tự động theo giờ Hà Nội",
-    value=True,  # MẶC ĐỊNH BẬT — ai mở trang cũng tự đúng giờ luôn, không cần bấm gì cả.
-    key="auto_theme",
-    help="Bật lên: sau 18h tối web tự chuyển Chế độ tối, sau 6h sáng tự chuyển lại Chế độ sáng — không cần bấm tay. Tắt đi nếu muốn tự chọn Chế độ tối/sáng theo ý mình.",
-)
-dark_mode_thu_cong = st.sidebar.toggle(
-    "🌙 Chế độ tối", key="dark_mode", disabled=auto_theme,
-)
+# --- Các nút bật/tắt (Tự động theo giờ, Chế độ tối tay, Thời tiết thật tự động) giờ đặt trong
+# tab "⚙️ Cài đặt" ở cuối trang (dễ bấm hơn trên điện thoại, khỏi cần mở thanh bên) — nhưng giá
+# trị của chúng cần biết NGAY ở đây để dựng theme + tải thời tiết trước khi tab nào kịp render.
+# Streamlit tự nhớ giá trị nút theo "key" qua session_state giữa các lần chạy lại trang, nên đọc
+# tạm ở đây (mặc định y hệt giá trị mặc định của nút thật bên dưới) là đủ, không cần nút hiện ra
+# sớm — nút thật ở tab Cài đặt dùng ĐÚNG các key này nên luôn đồng bộ 2 chiều. ---
+auto_theme = st.session_state.get("auto_theme", True)
+dark_mode_thu_cong = st.session_state.get("dark_mode", False)
 
 if auto_theme:
     dark_mode = _dang_la_ban_dem_o_ha_noi()
-    gio_hien_tai = datetime.now(GIO_HA_NOI).strftime("%H:%M")
-    st.sidebar.caption(f"🕒 Giờ Hà Nội: {gio_hien_tai} — đang tự bật {'🌙 Chế độ tối' if dark_mode else '☀️ Chế độ sáng'}")
 else:
     dark_mode = dark_mode_thu_cong
 
@@ -608,6 +607,7 @@ else:
     # thay vì một màu xám trắng phẳng lì như trước.
     C_BG_CSS = "linear-gradient(180deg, #dbeafe 0%, #eff6ff 32%, #f8fafc 65%)"
 
+tu_dong_thoi_tiet = st.session_state.get("tu_dong_thoi_tiet", True)
 
 # ---------------------------------------------------------------
 # THỜI TIẾT MỸ THO, TIỀN GIANG — lấy từ Open-Meteo (miễn phí, không cần đăng ký API key)
@@ -647,7 +647,8 @@ def _phan_loai_thoi_tiet(ma):
     return "may"  # 1-3 (ít mây/nhiều mây), 45/48 (sương mù)
 
 
-TRANG_THAI_THOI_TIET = lay_thoi_tiet_my_tho()  # None nếu không lấy được -> dùng mây ngẫu nhiên
+TRANG_THAI_THOI_TIET = lay_thoi_tiet_my_tho() if tu_dong_thoi_tiet else None
+# None -> dùng mây ngẫu nhiên (dù là vì tắt nút "Thời tiết thật tự động" hay vì gọi API lỗi).
 DANG_MUA = TRANG_THAI_THOI_TIET in ("mua", "mua_to")
 
 
@@ -779,6 +780,10 @@ st.markdown(f"""
     .tab-hero.schedule {{
         background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
         box-shadow: 0 8px 20px rgba(14, 165, 233, 0.25);
+    }}
+    .tab-hero.settings {{
+        background: linear-gradient(135deg, #64748b 0%, #334155 100%);
+        box-shadow: 0 8px 20px rgba(100, 116, 139, 0.25);
     }}
     .tab-hero-title {{ font-size: 1.3rem; font-weight: 800; margin: 0; }}
     .tab-hero-subtitle {{ opacity: 0.92; font-size: 0.88rem; margin-top: 4px; }}
@@ -1605,10 +1610,10 @@ else:
 
 
 # ---------------------------------------------------------------
-# 5 TAB CHÍNH: Trang chủ / Thời khóa biểu / Tin tức / Cập nhật / Góp ý
+# 6 TAB CHÍNH: Trang chủ / Thời khóa biểu / Tin tức / Cập nhật / Góp ý / Cài đặt
 # ---------------------------------------------------------------
-tab_home, tab_tkb, tab_news, tab_update, tab_feedback = st.tabs(
-    ["🏠 Trang chủ", "📅 Thời khóa biểu", "📰 Tin tức", "🆕 Cập nhật", "💬 Góp ý"]
+tab_home, tab_tkb, tab_news, tab_update, tab_feedback, tab_settings = st.tabs(
+    ["🏠 Trang chủ", "📅 Thời khóa biểu", "📰 Tin tức", "🆕 Cập nhật", "💬 Góp ý", "⚙️ Cài đặt"]
 )
 
 # =================================================================
@@ -2201,3 +2206,55 @@ with tab_feedback:
                 '</div>',
                 unsafe_allow_html=True,
             )
+
+# =================================================================
+# TAB 6 — CÀI ĐẶT (gom các nút bật/tắt giao diện vào 1 chỗ dễ tìm, đỡ phải mở thanh bên —
+# đặc biệt tiện trên điện thoại vì thanh bên mặc định đang ẩn). Giá trị THẬT của các nút này
+# đã được đọc sớm từ session_state ở đầu file (biến auto_theme/dark_mode/tu_dong_thoi_tiet) để
+# kịp dựng theme + tải thời tiết trước khi tab nào render — ở đây chỉ là nơi hiện nút ra cho
+# người dùng bấm, dùng đúng các "key" đó nên luôn đồng bộ 2 chiều.
+# =================================================================
+with tab_settings:
+    st.markdown(
+        '<div class="tab-hero settings">'
+        '<div class="tab-hero-title">⚙️ Cài đặt</div>'
+        '<div class="tab-hero-subtitle">Tuỳ chỉnh giao diện web theo ý bạn — bấm là áp dụng ngay, không cần lưu gì cả</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("##### 🌗 Giao diện sáng / tối")
+    st.toggle(
+        "🕒 Tự động theo giờ Hà Nội",
+        value=True,
+        key="auto_theme",
+        help="Bật lên: sau 18h tối web tự chuyển Chế độ tối, sau 6h sáng tự chuyển lại Chế độ sáng — không cần bấm tay. Tắt đi nếu muốn tự chọn Chế độ tối/sáng theo ý mình.",
+    )
+    st.toggle("🌙 Chế độ tối", key="dark_mode", disabled=auto_theme)
+    if auto_theme:
+        gio_hien_tai_cd = datetime.now(GIO_HA_NOI).strftime("%H:%M")
+        st.caption(
+            f"🕒 Giờ Hà Nội: {gio_hien_tai_cd} — đang tự bật "
+            f"{'🌙 Chế độ tối' if dark_mode else '☀️ Chế độ sáng'}"
+        )
+
+    st.write("")
+    st.markdown("##### 🌦️ Thời tiết")
+    st.toggle(
+        "🌦️ Thời tiết thật tự động",
+        value=True,
+        key="tu_dong_thoi_tiet",
+        help="Bật lên: mây/nắng/mưa và nhật thực trên giao diện tự đổi theo thời tiết THẬT ở Mỹ "
+        "Tho, Tiền Giang (lấy từ Open-Meteo, 30 phút mới gọi lại 1 lần). Tắt đi nếu muốn giao diện "
+        "luôn là mây ngẫu nhiên vui mắt, không phụ thuộc thời tiết ngoài đời.",
+    )
+    TEN_THOI_TIET_HIEN_THI = {
+        "nang": "☀️ Nắng", "may": "☁️ Nhiều mây", "mua": "🌧️ Mưa", "mua_to": "⛈️ Giông bão",
+    }
+    if tu_dong_thoi_tiet:
+        if TRANG_THAI_THOI_TIET:
+            st.caption(f"📍 Thời tiết Mỹ Tho hiện tại: {TEN_THOI_TIET_HIEN_THI.get(TRANG_THAI_THOI_TIET, 'Không rõ')}")
+        else:
+            st.caption("📍 Chưa lấy được thời tiết thật (mạng lỗi/API sập) — đang tạm dùng mây ngẫu nhiên.")
+    else:
+        st.caption("📍 Đang tắt — giao diện luôn hiện mây ngẫu nhiên, không phụ thuộc thời tiết ngoài đời.")
