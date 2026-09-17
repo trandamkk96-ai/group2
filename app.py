@@ -33,7 +33,9 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("16/09/2026", "☀️ Nhật thực giờ đúng kiểu thật hơn: đĩa che tròn y hệt mặt trăng (không còn cạnh thẳng), khuyết dần từ bên phải, che kín thì có vành sáng vàng mảnh nổi lên quanh mép (vành nhật hoa) và cả bầu trời tối sầm lại như Chế độ tối một lúc, rồi khuyết dần trả lại ánh sáng cũng từ bên phải luôn (không quay đầu lại, giống mặt trăng đi ngang qua một lượt)."),
+    ("17/09/2026", "➕➖ Mục \"Xem lịch sử\" của mỗi thành viên giờ có thêm 2 ô tổng kết ngay phía trên bảng: tổng số điểm ĐƯỢC CỘNG và tổng số điểm BỊ TRỪ (kèm số lần), khỏi cần tự cộng trừ từng dòng nữa."),
+    ("17/09/2026", "🌦️ Mưa/giông bão chân thật hơn: mưa giờ có 2 lớp hạt (gần to rõ, xa nhỏ mờ) nhìn có chiều sâu hơn hẳn; trời mưa thì mây dày + xám đậm hơn, mặt trời mờ hẳn xuống, và tắt luôn nhật thực (mưa mù thì làm sao thấy được); riêng lúc GIÔNG BÃO còn tối hơn nữa, mây đen kịt và có chớp sét lóe sáng đều 20 lần/phút."),
+    ("17/09/2026", "☀️ Nhật thực giờ vào trang chỉ 2 giây là bắt đầu che luôn (khỏi phải đợi lâu mới thấy), rồi tự chuyển động liên tục không dừng khựng giữa chừng: 2 phút che vào, 2 phút che ra, 2 phút nắng đẹp, rồi lặp lại đều đặn — đĩa che tròn y hệt mặt trăng, khuyết dần từ bên phải, che kín đúng khoảnh khắc thì lóe vành nhật hoa lên và cả bầu trời tối sầm như Chế độ tối, rồi đi tiếp luôn để sáng dần trở lại cũng từ bên phải (không quay đầu, giống mặt trăng thật đi ngang qua một lượt)."),
     ("16/09/2026", "🌌 Dải Ngân Hà (Chế độ tối) giờ hiện nhiều ngày hơn: Thứ 6, Thứ 7, Chủ Nhật và Thứ 2 — thay vì chỉ mỗi Thứ 2 như trước."),
     ("16/09/2026", "🔧 Sửa lỗi hiện chữ/code rối mắt phía trên thanh tab (do phần code vẽ dải Ngân Hà gây ra) — cảm ơn mọi người đã báo lỗi, giờ web hiện bình thường lại rồi."),
     ("16/09/2026", "🌌 Mỗi ngày trong tuần Chế độ tối có 1 hiện tượng thiên văn riêng: Thứ 2 là dải Ngân Hà sáng rực cả vùng trời, Thứ 4/6/CN là sao chổi (đầu sáng + đuôi dài ánh xanh, bay chậm và hiếm hơn), các ngày còn lại vẫn là sao băng như cũ. Chế độ sáng thì thêm nhật thực: cứ 5 phút web mở là có 3 phút mặt trăng che mặt trời rồi lại sáng ra, lặp lại đều đặn — tất cả đều vẽ bằng CSS thuần, không cần JavaScript nên điện thoại yếu vẫn chạy mượt."),
@@ -1215,17 +1217,25 @@ else:
     # đặt cùng vị trí với mặt trăng bên Chế độ tối cho hai giao diện "đối xứng" nhau.
     #
     # SỐ LƯỢNG/MÀU MÂY + ĐỘ SÁNG MẶT TRỜI đổi theo thời tiết THẬT ở Mỹ Tho (nắng: mây thưa
-    # trắng, mặt trời rõ; nhiều mây: mây dày hơn, xám nhẹ, mặt trời mờ bớt; mưa: mây xám đậm,
-    # mặt trời gần như khuất). Không lấy được thời tiết (mạng lỗi/API sập) thì TỰ ĐỘNG quay về
-    # mây ngẫu nhiên như bản gốc — vị trí random nhẹ mỗi lần tải trang cho đỡ nhàm.
+    # trắng, mặt trời rõ; nhiều mây: mây dày hơn, xám nhẹ, mặt trời mờ bớt; mưa: mây dày và
+    # xám đậm hơn nữa, mặt trời mờ hẳn; GIÔNG BÃO thì mây dày nhất + xậm màu nhất + mặt trời
+    # gần như tắt hẳn, có thêm chớp sét — xem khối "if DANG_MUA" bên dưới). Không lấy được thời
+    # tiết (mạng lỗi/API sập) thì TỰ ĐỘNG quay về mây ngẫu nhiên như bản gốc — vị trí random nhẹ
+    # mỗi lần tải trang cho đỡ nhàm.
     if TRANG_THAI_THOI_TIET == "nang":
         SO_MAY, MAU_MAY, DO_SANG_MAT_TROI = 2, "#ffffff", 1.0
     elif TRANG_THAI_THOI_TIET == "may":
         SO_MAY, MAU_MAY, DO_SANG_MAT_TROI = 5, "#e2e8f0", 0.5
-    elif TRANG_THAI_THOI_TIET in ("mua", "mua_to"):
-        SO_MAY, MAU_MAY, DO_SANG_MAT_TROI = 6, "#94a3b8", 0.15
+    elif TRANG_THAI_THOI_TIET == "mua":
+        SO_MAY, MAU_MAY, DO_SANG_MAT_TROI = 8, "#64748b", 0.08
+    elif TRANG_THAI_THOI_TIET == "mua_to":
+        SO_MAY, MAU_MAY, DO_SANG_MAT_TROI = 10, "#334155", 0.02
     else:
         SO_MAY, MAU_MAY, DO_SANG_MAT_TROI = 3, "#ffffff", 1.0  # không rõ thời tiết -> như cũ
+
+    # Nhật thực chỉ hiện khi trời có thể nhìn thấy mặt trời (nắng/nhiều mây/không rõ) — trời
+    # đang mưa thì mây đen kịt che kín rồi, chẳng ai thấy nhật thực được nên tắt hẳn cho hợp lý.
+    HIEN_NHAT_THUC = TRANG_THAI_THOI_TIET not in ("mua", "mua_to")
 
     _may = [
         (round(random.uniform(5, 62), 1), round(random.uniform(3, 88), 1), round(random.uniform(16, 27), 1))
@@ -1236,6 +1246,19 @@ else:
         f'transform: scale({scale / 22}); --mau-may: {MAU_MAY};"></div>'
         for i, (top, left, scale) in enumerate(_may)
     )
+    # Nhật thực TẮT hẳn khi trời mưa (xem HIEN_NHAT_THUC ở trên) — dựng sẵn các mẩu HTML/CSS
+    # thành biến Python trước, rồi ghép vào ngay trên 1 dòng có nội dung khác (không để riêng
+    # 1 dòng trống khi rỗng) để tránh lỗi hiện chữ thô đã gặp phải trước đây.
+    if HIEN_NHAT_THUC:
+        NHAT_THUC_HTML = '<div class="nhat-thuc"></div>'
+        TOI_TROI_HTML = '<div class="nhat-thuc-toi-troi"></div>'
+        VANH_SANG_HTML = '<div class="nhat-thuc-vanh-sang"></div>'
+        SUN_WRAP_ANIM = "sunGlow 5s ease-in-out infinite, sangToiNhatThuc 362s linear infinite"
+    else:
+        NHAT_THUC_HTML = ""
+        TOI_TROI_HTML = ""
+        VANH_SANG_HTML = ""
+        SUN_WRAP_ANIM = "sunGlow 5s ease-in-out infinite"
     st.markdown(f"""
     <style>
         .daysky {{ position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }}
@@ -1250,7 +1273,7 @@ else:
             position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
             border-radius: 50%; overflow: hidden; opacity: {DO_SANG_MAT_TROI};
             filter: drop-shadow(0 0 45px rgba(255, 200, 87, 0.45)) drop-shadow(0 0 90px rgba(255, 200, 87, 0.18));
-            animation: sunGlow 5s ease-in-out infinite, sangToiNhatThuc 300s linear infinite;
+            animation: {SUN_WRAP_ANIM};
         }}
         .sun {{
             position: absolute; inset: 0; border-radius: 50%;
@@ -1260,12 +1283,14 @@ else:
             0%, 100% {{ filter: drop-shadow(0 0 45px rgba(255, 200, 87, 0.45)) drop-shadow(0 0 90px rgba(255, 200, 87, 0.18)); }}
             50% {{ filter: drop-shadow(0 0 58px rgba(255, 200, 87, 0.6)) drop-shadow(0 0 110px rgba(255, 200, 87, 0.28)); }}
         }}
-        /* Ánh sáng + quầng sáng mờ dần khi nhật thực tới gần, tối hẳn lúc bị che hết, rồi sáng
-           từ từ trở lại — chạy chung nhịp 300s với đĩa che (.nhat-thuc) bên dưới nên luôn khớp
-           nhau: mờ dần 18s, tối hẳn ~144s, sáng lại dần 18s, rồi sáng bình thường ~120s. */
+        /* Ánh sáng mặt trời TỰ CHUYỂN DẦN liên tục, không dừng/chờ ở giữa chừng cho giống
+           thật: vào trang 2 giây thì bắt đầu che (mờ dần xuống tối hẳn trong 2 phút), rồi sáng
+           dần trở lại trong 2 phút kế (che ra), xong giữ nắng đẹp bình thường 2 phút — rồi lặp
+           lại y hệt (2 giây, che vào, che ra, nắng, lặp...). */
         @keyframes sangToiNhatThuc {{
-            0%, 40% {{ opacity: {DO_SANG_MAT_TROI}; }}
-            46%, 94% {{ opacity: 0.04; }}
+            0%, 0.55% {{ opacity: {DO_SANG_MAT_TROI}; }}
+            33.70% {{ opacity: 0.04; }}
+            66.85% {{ opacity: {DO_SANG_MAT_TROI}; }}
             100% {{ opacity: {DO_SANG_MAT_TROI}; }}
         }}
         @media (max-width: 640px) {{
@@ -1291,44 +1316,47 @@ else:
             .sun-wrap, .cloud {{ animation: none !important; }}
         }}
 
-        /* --- Nhật thực: cứ mỗi 5 phút thì có 3 phút mặt trăng che mặt trời (300s/chu kỳ,
-           lặp vô tận, thuần CSS không cần JavaScript/hẹn giờ gì cả). Đĩa tối là CON của
-           .sun-wrap (cùng khung tròn với mặt trời) rồi trượt ngang TỪ TỪ (18 giây) từ mép phải
-           vào — nhờ .sun-wrap có overflow:hidden nên phần đĩa trượt ra ngoài khung tròn bị CẮT
+        /* --- Nhật thực: chu kỳ 362 giây (~6 phút), lặp vô tận, thuần CSS không cần
+           JavaScript/hẹn giờ gì cả — vào trang 2 giây là bắt đầu che luôn (không phải đợi tới
+           gần hết chu kỳ mới thấy), rồi TỰ CHUYỂN DẦN liên tục không dừng/chờ giữa chừng cho
+           giống thật: 2 phút che vào + 2 phút che ra + 2 phút nắng đẹp, xong lặp lại (2 giây,
+           che vào, che ra, nắng, lặp...). Đĩa tối là CON của .sun-wrap (cùng khung tròn với mặt
+           trời) trượt ngang CÙNG MỘT CHIỀU từ đầu tới cuối (phải → trái) chứ không lùi lại giữa
+           chừng — nhờ .sun-wrap có overflow:hidden nên phần đĩa trượt ra ngoài khung tròn bị CẮT
            ẨN hết, chỉ phần đè lên đúng mặt trời mới hiện ra → che dần từng miếng "khuyết" y như
-           nhật thực thật. Trượt CÙNG MỘT CHIỀU từ đầu tới cuối (phải → trái) chứ không lùi lại
-           giữa chừng: che kín xong đi tiếp luôn nên lúc "nhả" ra ánh sáng cũng hiện lại bắt đầu
-           từ bên phải giống hệt lúc che vào — y như mặt trăng thật đi ngang qua một lượt, không
-           quay đầu. Giữ che kín một lúc rồi đi tiếp TỪ TỪ (18 giây) trả lại ánh sáng. Bộ đếm chạy
-           riêng từ lúc mở trang, không đồng bộ giờ thực giữa mọi người xem — chỉ là hiệu ứng
-           trang trí cho vui. --- */
+           nhật thực thật, che kín đúng 1 khoảnh khắc rồi đi tiếp luôn (không dừng) nên lúc "nhả"
+           ra ánh sáng cũng hiện lại bắt đầu từ bên phải giống hệt lúc che vào — y như mặt trăng
+           thật đi ngang qua một lượt, không quay đầu. Bộ đếm chạy riêng từ lúc mở trang, không
+           đồng bộ giờ thực giữa mọi người xem — chỉ là hiệu ứng trang trí cho vui. Tắt hẳn khi
+           trời mưa (xem HIEN_NHAT_THUC). --- */
         .nhat-thuc {{
             position: absolute; inset: 0; border-radius: 50%; background: #1e293b;
-            animation: nhat-thuc 300s linear infinite;
+            animation: nhat-thuc 362s linear infinite;
             will-change: transform;
         }}
         @keyframes nhat-thuc {{
-            0%, 40% {{ transform: translateX(100%); }}
-            46%, 94% {{ transform: translateX(0%); }}
-            100% {{ transform: translateX(-100%); }}
+            0%, 0.55% {{ transform: translateX(100%); }}
+            33.70% {{ transform: translateX(0%); }}
+            66.85%, 100% {{ transform: translateX(-100%); }}
         }}
         @media (prefers-reduced-motion: reduce) {{
             .nhat-thuc {{ animation: none !important; transform: translateX(100%); }}
         }}
 
         /* --- Vành nhật hoa: viền sáng vàng mảnh quanh mép hình tròn, mờ hẳn lúc bình thường,
-           SÁNG RÕ lên đúng lúc mặt trời bị che kín hoàn toàn (tách riêng khỏi .sun-wrap nên
-           không bị mờ dần theo — nhờ vậy nó "nổi bật" lên giữa lúc tối nhất, giống hiệu ứng
-           "vành nhật hoa"/"diamond ring" của nhật thực thật). --- */
+           chỉ LÓE SÁNG lên đúng khoảnh khắc mặt trời bị che kín hoàn toàn (phút thứ 2 trong chu
+           kỳ) rồi tắt liền — tách riêng khỏi .sun-wrap nên không bị mờ dần theo, nhờ vậy nó
+           "nổi bật" lên giữa lúc tối nhất, giống hiệu ứng "vành nhật hoa"/"diamond ring" của
+           nhật thực thật. --- */
         .nhat-thuc-vanh-sang {{
             position: fixed; top: 5vh; right: 8vw; width: 72px; height: 72px;
             border-radius: 50%; pointer-events: none;
-            animation: vanhSangNhatThuc 300s linear infinite;
+            animation: vanhSangNhatThuc 362s linear infinite;
         }}
         @keyframes vanhSangNhatThuc {{
-            0%, 40% {{ box-shadow: inset 0 0 0 2px rgba(255, 221, 156, 0); }}
-            46%, 94% {{ box-shadow: inset 0 0 0 3px rgba(255, 224, 160, 0.95), 0 0 16px 3px rgba(255, 224, 160, 0.6); }}
-            100% {{ box-shadow: inset 0 0 0 2px rgba(255, 221, 156, 0); }}
+            0%, 28.37% {{ box-shadow: inset 0 0 0 2px rgba(255, 221, 156, 0); }}
+            33.70% {{ box-shadow: inset 0 0 0 3px rgba(255, 224, 160, 0.95), 0 0 16px 3px rgba(255, 224, 160, 0.6); }}
+            39.03%, 100% {{ box-shadow: inset 0 0 0 2px rgba(255, 221, 156, 0); }}
         }}
         @media (max-width: 640px) {{
             .nhat-thuc-vanh-sang {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
@@ -1338,16 +1366,17 @@ else:
         }}
 
         /* --- Lúc nhật thực che kín thì cả bầu trời tối sầm lại như Chế độ tối (không có sao,
-           chỉ tối nền thôi) rồi từ từ sáng trở lại — 1 lớp phủ đen mờ dần/hiện dần toàn màn
-           hình, canh đúng nhịp với đĩa che ở trên nên luôn khớp nhau. Chỉ dùng opacity nên rất
-           nhẹ, điện thoại yếu vẫn chạy mượt. --- */
+           chỉ tối nền thôi) rồi từ từ sáng trở lại — 1 lớp phủ đen đổi opacity theo ĐÚNG nhịp độ
+           che/mở của mặt trời ở trên (mờ dần 2 phút, sáng dần 2 phút) nên luôn khớp nhau, không
+           có đoạn dừng/chờ. Chỉ dùng opacity nên rất nhẹ, điện thoại yếu vẫn chạy mượt. --- */
         .nhat-thuc-toi-troi {{
             position: fixed; inset: 0; background: #0f172a; opacity: 0;
-            pointer-events: none; animation: nenToiNhatThuc 300s linear infinite;
+            pointer-events: none; animation: nenToiNhatThuc 362s linear infinite;
         }}
         @keyframes nenToiNhatThuc {{
-            0%, 40% {{ opacity: 0; }}
-            46%, 94% {{ opacity: 0.94; }}
+            0%, 0.55% {{ opacity: 0; }}
+            33.70% {{ opacity: 0.9; }}
+            66.85% {{ opacity: 0; }}
             100% {{ opacity: 0; }}
         }}
         @media (prefers-reduced-motion: reduce) {{
@@ -1356,42 +1385,83 @@ else:
     </style>
     <div class="daysky">
         <div class="sun-wrap">
-            <div class="sun"></div>
-            <div class="nhat-thuc"></div>
+            <div class="sun"></div>{NHAT_THUC_HTML}
         </div>
-        {CLOUDS_HTML}
-        <div class="nhat-thuc-toi-troi"></div>
-        <div class="nhat-thuc-vanh-sang"></div>
+        {CLOUDS_HTML}{TOI_TROI_HTML}{VANH_SANG_HTML}
     </div>
     """, unsafe_allow_html=True)
 
 # --- Mưa (dùng chung cho cả Chế độ tối lẫn sáng) — chỉ hiện khi Mỹ Tho đang có mưa thật,
 # vẽ hoàn toàn bằng CSS (1 lớp phủ full màn hình, chạy animation dịch chuyển nền — rất nhẹ,
-# không dùng JavaScript hay nhiều phần tử như sao/mây nên không ảnh hưởng gì đến tốc độ,
-# kể cả trên điện thoại yếu). Giông bão (mua_to) thì mưa dày và rơi nhanh hơn 1 chút. ---
+# không dùng JavaScript, chỉ opacity/background-position/vài phần tử tĩnh nên không ảnh hưởng
+# gì đến tốc độ, kể cả trên điện thoại yếu). Giờ vẽ 2 LỚP MƯA chồng nhau (lớp gần: hạt to, rơi
+# nhanh, rõ nét; lớp xa: hạt nhỏ, rơi chậm, mờ hơn) cho có chiều sâu giống mưa thật thay vì 1
+# lớp phẳng đơn điệu như trước. Giông bão (mua_to) thì mưa dày + rơi nhanh hơn hẳn, kèm CHỚP SÉT
+# (một lớp phủ trắng chớp sáng rồi tắt liền, lặp đều 20 lần/phút — thuần CSS, chỉ đổi opacity
+# nên vẫn rất nhẹ). ---
 if DANG_MUA:
     _mua_day = TRANG_THAI_THOI_TIET == "mua_to"
+    if _mua_day:
+        SET_HTML = '<div class="set-chop"></div>'
+    else:
+        SET_HTML = ""
     st.markdown(f"""
     <style>
-        .mua-overlay {{
-            position: fixed; inset: 0; z-index: -1; pointer-events: none;
+        .mua-overlay {{ position: fixed; inset: 0; z-index: -1; pointer-events: none; }}
+        /* Lớp mưa GẦN: hạt to, đậm nét, rơi nhanh — nổi bật ở tiền cảnh. */
+        .mua-overlay::before {{
+            content: ""; position: absolute; inset: -30px;
             background-image: repeating-linear-gradient(
-                115deg, transparent 0px, transparent 2px,
-                rgba(255,255,255,0.4) 2px, rgba(255,255,255,0.4) 3px,
-                transparent 3px, transparent {24 if _mua_day else 36}px
+                112deg, transparent 0px, transparent 2px,
+                rgba(255,255,255,0.55) 2px, rgba(255,255,255,0.55) 3px,
+                transparent 3px, transparent {26 if _mua_day else 40}px
             );
-            opacity: {0.65 if _mua_day else 0.48};
-            animation: mua-roi {0.4 if _mua_day else 0.65}s linear infinite;
+            opacity: {0.7 if _mua_day else 0.5};
+            animation: mua-roi-gan {0.32 if _mua_day else 0.55}s linear infinite;
         }}
-        @keyframes mua-roi {{
+        /* Lớp mưa XA: hạt nhỏ, mờ hơn, rơi chậm hơn — tạo chiều sâu phía sau lớp gần. */
+        .mua-overlay::after {{
+            content: ""; position: absolute; inset: -30px;
+            background-image: repeating-linear-gradient(
+                118deg, transparent 0px, transparent 1px,
+                rgba(255,255,255,0.3) 1px, rgba(255,255,255,0.3) 2px,
+                transparent 2px, transparent {18 if _mua_day else 28}px
+            );
+            opacity: {0.55 if _mua_day else 0.35};
+            animation: mua-roi-xa {0.5 if _mua_day else 0.8}s linear infinite;
+        }}
+        @keyframes mua-roi-gan {{
             from {{ background-position: 0 0; }}
-            to {{ background-position: -30px 90px; }}
+            to {{ background-position: -45px 140px; }}
+        }}
+        @keyframes mua-roi-xa {{
+            from {{ background-position: 0 0; }}
+            to {{ background-position: -20px 75px; }}
         }}
         @media (prefers-reduced-motion: reduce) {{
-            .mua-overlay {{ animation: none !important; opacity: 0.3; }}
+            .mua-overlay::before, .mua-overlay::after {{ animation: none !important; opacity: 0.3; }}
+        }}
+
+        /* --- Chớp sét (chỉ khi giông bão): 1 lớp phủ trắng toàn màn hình, LÓE lên rồi tắt liền
+           trong tích tắc đầu mỗi chu kỳ 3 giây — lặp đều 20 lần/phút, thuần CSS opacity. --- */
+        .set-chop {{
+            position: fixed; inset: 0; z-index: -1; pointer-events: none;
+            background: #f5f8ff; opacity: 0;
+            animation: chop-set 3s linear infinite;
+        }}
+        @keyframes chop-set {{
+            0% {{ opacity: 0; }}
+            0.6% {{ opacity: 0.65; }}
+            1.4% {{ opacity: 0.05; }}
+            2.2% {{ opacity: 0.45; }}
+            4% {{ opacity: 0; }}
+            100% {{ opacity: 0; }}
+        }}
+        @media (prefers-reduced-motion: reduce) {{
+            .set-chop {{ animation: none !important; opacity: 0; }}
         }}
     </style>
-    <div class="mua-overlay"></div>
+    <div class="mua-overlay"></div>{SET_HTML}
     """, unsafe_allow_html=True)
 
 
@@ -1422,6 +1492,18 @@ def do_tre_the(idx, buoc=0.045, toi_da=0.4):
     tạo cảm giác mượt mà hơn khi tải trang — giới hạn độ trễ tối đa để danh sách dài không
     bị chờ quá lâu mới hiện hết."""
     return min(idx * buoc, toi_da)
+
+
+def tong_ket_diem(hist_df):
+    """Từ bảng lịch sử của 1 thành viên (cột "Điểm"), tính tổng số điểm ĐƯỢC CỘNG và tổng số
+    điểm BỊ TRỪ riêng biệt (kèm số lần) — để hiện gọn "bạn này được cộng bao nhiêu, bị trừ bao
+    nhiêu" thay vì phải tự cộng trừ từng dòng trong bảng."""
+    if hist_df.empty or "Điểm" not in hist_df.columns:
+        return 0, 0, 0, 0
+    diem_col = hist_df["Điểm"]
+    cong = diem_col[diem_col > 0]
+    tru = diem_col[diem_col < 0]
+    return int(cong.sum()), int(len(cong)), int(tru.sum()), int(len(tru))
 
 
 def badges_html(name, diem, diem_max, recent_map, extra_class=""):
@@ -1775,6 +1857,10 @@ with tab_home:
                 with st.expander(f"Xem lịch sử của {ten}"):
                     hist_df = hist_by_member.get(ten, pd.DataFrame())
                     if not hist_df.empty:
+                        tong_cong, lan_cong, tong_tru, lan_tru = tong_ket_diem(hist_df)
+                        c_tk1, c_tk2 = st.columns(2)
+                        c_tk1.metric("➕ Tổng được cộng", f"+{tong_cong}", f"{lan_cong} lần")
+                        c_tk2.metric("➖ Tổng bị trừ", f"{tong_tru}", f"{lan_tru} lần")
                         st.dataframe(hist_df, use_container_width=True, hide_index=True)
                     else:
                         st.caption("Chưa có lịch sử cộng/trừ điểm.")
@@ -1827,6 +1913,10 @@ with tab_home:
                 with st.expander(f"Xem lịch sử của {ten}"):
                     hist_df = hist_by_member.get(ten, pd.DataFrame())
                     if not hist_df.empty:
+                        tong_cong, lan_cong, tong_tru, lan_tru = tong_ket_diem(hist_df)
+                        c_tk1, c_tk2 = st.columns(2)
+                        c_tk1.metric("➕ Tổng được cộng", f"+{tong_cong}", f"{lan_cong} lần")
+                        c_tk2.metric("➖ Tổng bị trừ", f"{tong_tru}", f"{lan_tru} lần")
                         st.dataframe(hist_df, use_container_width=True, hide_index=True)
                     else:
                         st.caption("Chưa có lịch sử cộng/trừ điểm.")
@@ -1839,6 +1929,10 @@ with tab_home:
                     with st.expander(f"Xem lịch sử của {ten}"):
                         hist_df = hist_by_member.get(ten, pd.DataFrame())
                         if not hist_df.empty:
+                            tong_cong, lan_cong, tong_tru, lan_tru = tong_ket_diem(hist_df)
+                            c_tk1, c_tk2 = st.columns(2)
+                            c_tk1.metric("➕ Tổng được cộng", f"+{tong_cong}", f"{lan_cong} lần")
+                            c_tk2.metric("➖ Tổng bị trừ", f"{tong_tru}", f"{lan_tru} lần")
                             st.dataframe(hist_df, use_container_width=True, hide_index=True)
                         else:
                             st.caption("Chưa có lịch sử cộng/trừ điểm.")
