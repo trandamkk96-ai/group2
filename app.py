@@ -34,6 +34,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("18/09/2026", "📊 File Excel/PDF xuất ra giờ có thêm 3 cột ở bảng điểm: Tổng điểm được cộng (+), Tổng điểm bị trừ (-), và Tổng cả hai — tính đúng theo khoảng lịch sử đang xuất (nếu có lọc theo ngày thì 3 cột này cũng tính riêng theo đúng khoảng đó), khỏi cần tự cộng trừ tay."),
     ("18/09/2026", "🌌 Làm lại dải Ngân Hà cho dịu mắt hơn hẳn: bỏ hẳn mấy đám \"bụi vũ trụ\" tối màu (nhìn giống vết bẩn loang lổ), bỏ luôn tông màu tím sặc sỡ, thay bằng 1 quầng sáng mềm mại tự nhoè đều mọi hướng (không còn bị cắt cạnh như trước) — nhẹ nhàng, tự nhiên hơn nhiều."),
     ("18/09/2026", "🔐 Admin có thể KHOÁ điểm 1 hoặc nhiều bạn (đặt kèm mật khẩu riêng): điểm bạn đó biến mất khỏi bảng xếp hạng, lịch sử cộng/trừ, nhật ký hoạt động, tổng điểm cả nhóm và file Excel/PDF xuất ra — chỉ ai nhập đúng mật khẩu ở Trang chủ mới xem lại được, riêng Admin thì luôn thấy hết. Quản lý khoá/mở khoá và đổi mật khẩu ngay trong tab Admin."),
     ("18/09/2026", "🎊 Tab Admin có thêm mục \"Ngày lễ tuỳ chỉnh\": Admin tự thêm 1 ngày cụ thể trong tương lai (sinh nhật nhóm, ngày thi xong, ngày kỷ niệm lớp...) kèm chọn hiệu ứng riêng (thiên văn/tuyết/pháo hoa/trình diễn drone với chữ tuỳ ý) cho đúng ngày đó — không cần sửa code, tới ngày tự bật rồi tự tắt luôn, khỏi cần nhớ tắt tay. Ngày đã thêm cũng tự xuất hiện trong mục báo trước 2 ngày ở Trang chủ. Admin có thể xoá bất kỳ ngày nào đã thêm."),
@@ -312,8 +313,27 @@ def make_qr_bytes(url):
     return buf.getvalue()
 
 
+def _cot_tong_cong_tru(bang_diem, history_df):
+    """Thêm 3 cột 'Tổng điểm được cộng (+)' / 'Tổng điểm bị trừ (-)' / 'Tổng cả hai (+/-)' vào
+    bảng điểm để xuất Excel/PDF — tính từ ĐÚNG phần lịch sử đang được xuất (nếu người dùng có lọc
+    theo khoảng ngày ở Trang chủ thì 3 cột này cũng tính riêng theo đúng khoảng ngày đó, có thể
+    khác với cột "Điểm hiện tại" là điểm toàn thời gian lưu trong hệ thống)."""
+    bang_diem = bang_diem.copy()
+    if not history_df.empty and "Thành viên" in history_df.columns and "Điểm" in history_df.columns:
+        tong_cong = history_df.loc[history_df["Điểm"] > 0].groupby("Thành viên")["Điểm"].sum()
+        tong_tru = history_df.loc[history_df["Điểm"] < 0].groupby("Thành viên")["Điểm"].sum()
+    else:
+        tong_cong = pd.Series(dtype="int64")
+        tong_tru = pd.Series(dtype="int64")
+    bang_diem["Tổng điểm được cộng (+)"] = bang_diem["Thành viên"].map(tong_cong).fillna(0).astype(int)
+    bang_diem["Tổng điểm bị trừ (-)"] = bang_diem["Thành viên"].map(tong_tru).fillna(0).astype(int)
+    bang_diem["Tổng cả hai (+/-)"] = bang_diem["Tổng điểm được cộng (+)"] + bang_diem["Tổng điểm bị trừ (-)"]
+    return bang_diem
+
+
 def to_excel_bytes(members_df, history_df):
     bang_diem = members_df.rename(columns={"name": "Thành viên", "diem": "Điểm hiện tại"})
+    bang_diem = _cot_tong_cong_tru(bang_diem, history_df)
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         bang_diem.to_excel(writer, index=False, sheet_name="Bang diem")
@@ -363,10 +383,18 @@ def to_pdf_bytes(members_df, history_df, tieu_de="Bao cao diem nhom"):
 
     elements.append(Paragraph("Bảng điểm hiện tại", heading_style))
     elements.append(Spacer(1, 6))
-    diem_data = [["Thành viên", "Điểm hiện tại"]] + [
-        [str(r["name"]), str(int(r["diem"]))] for _, r in members_df.iterrows()
+    _bang_diem_pdf = _cot_tong_cong_tru(
+        members_df.rename(columns={"name": "Thành viên", "diem": "Điểm hiện tại"}), history_df
+    )
+    diem_data = [["Thành viên", "Điểm hiện tại", "Tổng cộng (+)", "Tổng trừ (-)", "Tổng cả hai"]] + [
+        [
+            str(r["Thành viên"]), str(int(r["Điểm hiện tại"])),
+            f'+{int(r["Tổng điểm được cộng (+)"])}', str(int(r["Tổng điểm bị trừ (-)"])),
+            f'{int(r["Tổng cả hai (+/-)"]):+d}',
+        ]
+        for _, r in _bang_diem_pdf.iterrows()
     ]
-    elements.append(_pdf_table(diem_data, [10 * cm, 5 * cm]))
+    elements.append(_pdf_table(diem_data, [5 * cm, 3.2 * cm, 3.2 * cm, 3.2 * cm, 3.4 * cm]))
     elements.append(Spacer(1, 20))
 
     elements.append(Paragraph("Lịch sử cộng / trừ điểm", heading_style))
