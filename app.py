@@ -34,6 +34,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("18/09/2026", "🎆 Pháo hoa đẹp và thật hơn hẳn: giờ có vệt sáng bay vọt lên trước rồi mới nổ (giống pháo hoa thật), mỗi quả nổ ra 2-3 màu xen kẽ thay vì 1 màu đơn điệu, có 3 kiểu nổ ngẫu nhiên (hoa mẫu đơn tròn đều / hoa liễu rủ tia rơi chậm có đuôi / hoa cúc đại đoá nhiều tia mảnh dài), và quả to thì có thêm nhịp sáng rất nhẹ loé khắp màn hình đúng lúc nổ cho cảm giác rung động như pháo hoa thật."),
     ("18/09/2026", "☀️ Đang có lễ hội (Admin bật cưỡng chế thiên văn/pháo hoa/drone, HOẶC đúng ngày lễ thật đang diễn ra) thì thời tiết hiển thị trên web tự động chuyển sang \"nắng đẹp\", dù trời Mỹ Tho ngoài đời đang mưa hay nhiều mây cũng không làm mất không khí vui — hết lễ hội thì tự quay về đúng thời tiết thật như cũ."),
     ("18/09/2026", "📊 File Excel/PDF xuất ra giờ có thêm 3 cột ở bảng điểm: Tổng điểm được cộng (+), Tổng điểm bị trừ (-), và Tổng cả hai — tính đúng theo khoảng lịch sử đang xuất (nếu có lọc theo ngày thì 3 cột này cũng tính riêng theo đúng khoảng đó), khỏi cần tự cộng trừ tay."),
     ("18/09/2026", "🌌 Làm lại dải Ngân Hà cho dịu mắt hơn hẳn: bỏ hẳn mấy đám \"bụi vũ trụ\" tối màu (nhìn giống vết bẩn loang lổ), bỏ luôn tông màu tím sặc sỡ, thay bằng 1 quầng sáng mềm mại tự nhoè đều mọi hướng (không còn bị cắt cạnh như trước) — nhẹ nhàng, tự nhiên hơn nhiều."),
@@ -1877,48 +1878,108 @@ if HIEU_UNG_TUYET:
 # PHÁO HOA (đêm Giáng Sinh, hoặc bất kỳ lúc nào Admin cưỡng chế bật) — kỹ thuật box-shadow:
 # nhiều "tia lửa" đặt quanh 1 tâm bằng box-shadow, rồi cả cụm phóng to dần + mờ dần bằng
 # transform: scale()/opacity — vì tia lửa nằm trong box-shadow của CHÍNH phần tử bị scale nên
-# tự giãn ra theo, tạo cảm giác nổ tung thật sự mà không cần JavaScript.
+# tự giãn ra theo, tạo cảm giác nổ tung thật sự mà không cần JavaScript. Mỗi quả gồm 3 phần:
+# (1) vệt sáng bay vọt lên trước khi nổ (.phao-hoa-roi), (2) cụm tia nổ nhiều màu xen kẽ, 1
+# trong 3 kiểu nổ khác nhau — mẫu đơn/liễu rủ/cúc đại đoá (.phao-hoa-no), (3) với quả lớn có
+# thêm 1 nhịp sáng rất nhẹ phủ toàn màn hình đúng lúc nổ (.phao-hoa-flash) cho cảm giác rung.
 # ---------------------------------------------------------------------------
 if HIEU_UNG_PHAO_HOA:
     def _tao_phao_hoa():
         MAU_PHAO = ["#f87171", "#fbbf24", "#34d399", "#60a5fa", "#e879f9", "#fb923c", "#facc15"]
+        MAU_VET_BAY = "#fff7d6"
+        # (tên lớp CSS, số tia, bán kính tia, cỡ chấm nổ) cho từng kiểu pháo hoa.
+        CAC_KIEU = [
+            ("kieu-don", 14, 26, 3),   # hoa mẫu đơn: nổ tròn đều, tia thẳng — kiểu cổ điển
+            ("kieu-lieu", 16, 32, 3),  # hoa liễu rủ: tia dài hơn, nổ xong rơi chậm có đuôi sáng
+            ("kieu-cuc", 24, 40, 2),   # hoa cúc đại đoá: rất nhiều tia mảnh, toả dài và mịn
+        ]
         SO_QUA = 6
-        SO_TIA = 14
         parts = []
         for i in range(SO_QUA):
-            mau = random.choice(MAU_PHAO)
+            lop_kieu, so_tia, ban_kinh, kich_thuoc = random.choices(
+                CAC_KIEU, weights=[0.42, 0.33, 0.25]
+            )[0]
+            mau_ds = random.sample(MAU_PHAO, k=random.choice([2, 3]))
             tia = ", ".join(
-                f"{round(26 * math.cos(2 * math.pi * j / SO_TIA), 1)}px "
-                f"{round(26 * math.sin(2 * math.pi * j / SO_TIA), 1)}px 0 1.5px {mau}"
-                for j in range(SO_TIA)
+                f"{round(ban_kinh * math.cos(2 * math.pi * j / so_tia), 1)}px "
+                f"{round(ban_kinh * math.sin(2 * math.pi * j / so_tia), 1)}px 0 1.5px "
+                f"{mau_ds[j % len(mau_ds)]}"
+                for j in range(so_tia)
             )
             top = round(random.uniform(8, 45), 1)
             left = round(random.uniform(10, 90), 1)
             delay = round(i * (30 / SO_QUA) + random.uniform(0, 2), 2)
+            co_nhap_nhay = (i % 3 == 0)  # ~1/3 số quả là quả "to", có thêm nhịp sáng màn hình
+            flash_html = (
+                f'<span class="phao-hoa-flash" style="animation-delay:{delay}s;"></span>'
+                if co_nhap_nhay else ""
+            )
             parts.append(
-                f'<div class="phao-hoa" style="top:{top}vh; left:{left}vw; '
-                f'animation-delay:{delay}s; box-shadow:{tia}; background:{mau};"></div>'
+                f'<div class="phao-hoa-wrap" style="top:{top}vh; left:{left}vw;">'
+                f'<span class="phao-hoa-roi" style="animation-delay:{delay}s; '
+                f'background:{MAU_VET_BAY}; box-shadow:0 0 5px 1px {MAU_VET_BAY};"></span>'
+                f'<span class="phao-hoa-no {lop_kieu}" style="width:{kich_thuoc}px; '
+                f'height:{kich_thuoc}px; animation-delay:{delay}s; box-shadow:{tia}; '
+                f'background:{mau_ds[0]};"></span>{flash_html}</div>'
             )
         return "".join(parts)
 
     PHAO_HOA_HTML = _tao_phao_hoa()
     st.markdown(f"""
     <style>
-        .phao-hoa {{
-            position: fixed; z-index: -1; pointer-events: none;
-            width: 3px; height: 3px; border-radius: 50%;
+        .phao-hoa-wrap {{ position: fixed; z-index: -1; pointer-events: none; width: 0; height: 0; }}
+        .phao-hoa-roi {{
+            position: absolute; top: 0; left: 0; border-radius: 50%;
+            width: 3px; height: 3px; opacity: 0;
+            animation: phao-bay-len 6s ease-out infinite;
+        }}
+        .phao-hoa-no {{
+            position: absolute; top: 0; left: 0; border-radius: 50%;
             transform: scale(0); opacity: 0;
-            animation: no-phao 6s ease-out infinite;
+        }}
+        .phao-hoa-no.kieu-don {{ animation: no-phao 6s ease-out infinite; }}
+        .phao-hoa-no.kieu-lieu {{ animation: no-phao-lieu 6s ease-out infinite; }}
+        .phao-hoa-no.kieu-cuc {{ animation: no-phao-cuc 6s ease-out infinite; }}
+        .phao-hoa-flash {{
+            position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0;
+            background: radial-gradient(circle at 50% 35%, rgba(255,250,230,0.9) 0%, rgba(255,250,230,0.25) 45%, transparent 75%);
+            animation: phao-flash 6s ease-out infinite;
+        }}
+        @keyframes phao-bay-len {{
+            0% {{ transform: translateY(24vh) scale(0.6); opacity: 0; }}
+            2% {{ opacity: 0.9; }}
+            12% {{ transform: translateY(1vh) scale(1); opacity: 1; box-shadow: 0 5px 8px -1px rgba(255,247,214,0.85); }}
+            15%, 100% {{ transform: translateY(0) scale(0.4); opacity: 0; }}
         }}
         @keyframes no-phao {{
-            0% {{ transform: scale(0); opacity: 0; }}
-            3% {{ transform: scale(0.2); opacity: 1; }}
-            18% {{ transform: scale(1); opacity: 1; }}
-            45% {{ transform: scale(1.4); opacity: 0; }}
-            100% {{ transform: scale(1.4); opacity: 0; }}
+            0%, 14% {{ transform: scale(0); opacity: 0; }}
+            17% {{ transform: scale(0.2); opacity: 1; }}
+            32% {{ transform: scale(1); opacity: 1; }}
+            56%, 100% {{ transform: scale(1.4); opacity: 0; }}
+        }}
+        @keyframes no-phao-lieu {{
+            0%, 14% {{ transform: translateY(0) scale(0); opacity: 0; }}
+            17% {{ transform: translateY(0) scale(0.2); opacity: 1; }}
+            30% {{ transform: translateY(0) scale(1); opacity: 1; }}
+            72% {{ transform: translateY(11vh) scale(1.15); opacity: 0.45; }}
+            100% {{ transform: translateY(20vh) scale(1.15); opacity: 0; }}
+        }}
+        @keyframes no-phao-cuc {{
+            0%, 14% {{ transform: scale(0); opacity: 0; }}
+            17% {{ transform: scale(0.15); opacity: 1; }}
+            30% {{ transform: scale(1.1); opacity: 1; }}
+            50%, 100% {{ transform: scale(1.6); opacity: 0; }}
+        }}
+        @keyframes phao-flash {{
+            0%, 15% {{ opacity: 0; }}
+            17% {{ opacity: 0.16; }}
+            24%, 100% {{ opacity: 0; }}
+        }}
+        @media (max-width: 640px) {{
+            .phao-hoa-flash {{ display: none; }}
         }}
         @media (prefers-reduced-motion: reduce) {{
-            .phao-hoa {{ animation: none !important; opacity: 0 !important; }}
+            .phao-hoa-roi, .phao-hoa-no, .phao-hoa-flash {{ animation: none !important; opacity: 0 !important; }}
         }}
     </style>
     <div>{PHAO_HOA_HTML}</div>
