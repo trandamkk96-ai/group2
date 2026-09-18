@@ -34,6 +34,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("18/09/2026", "🌌 Dải Ngân Hà chân thật hơn hẳn: trước đây chỉ là 1 vệt mờ tô trơn, giờ có thêm hàng trăm ngôi sao li ti rắc dày ở giữa dải (thưa dần ra 2 mép) để thấy rõ dải sáng đó được tạo thành từ vô số ngôi sao, cộng thêm vài đám bụi vũ trụ tối màu cắt ngang (dark dust lane) giống hệt ảnh chụp thiên văn thật — vẫn thuần CSS, không ảnh hưởng gì tốc độ trang."),
     ("17/09/2026", "🎆🧧 Thêm Tết Dương Lịch (1/1) và Tết Nguyên Đán vào hệ thống ngày lễ: 20 phút cuối trước giao thừa có drone đếm ngược phút:giây ngay trên Trang chủ, đúng giao thừa thì tự chuyển qua bắn pháo hoa suốt đêm giao thừa. Tết Nguyên Đán tự động đúng ngày cho các năm 2027, 2028, 2029 (đã tra cứu sẵn). Thêm luôn tính năng báo trước trên Trang chủ: còn 2 ngày trở xuống là tới bất kỳ ngày lễ nào đã lập trình (Giáng Sinh/20-11/Trung Thu/Tết Dương/Tết Ta) thì tự hiện thông báo đếm ngày, không cần bấm gì."),
     ("17/09/2026", "🎄🚁 Thêm trang trí theo ngày lễ: Giáng Sinh (24-25/12) có tuyết rơi cả ngày lẫn đêm, riêng ban đêm có thêm dải Ngân Hà + pháo hoa; 20/11 và Tết Trung Thu có \"trình diễn drone\" (dòng chữ phát sáng lấp lánh) hiện 2 phút/ẩn 3 phút xen kẽ đều đặn, ghi \"Chúc mừng 20/11\" hoặc \"Tết Trung Thu\". Thêm tab \"🔒 Admin\" (chỉ Admin thấy) để cưỡng chế bật bất kỳ hiệu ứng nào (thiên văn/pháo hoa/drone với chữ tuỳ ý) cho MỌI người xem bất kể ngày gì, tắt cưỡng chế là tự quay lại đúng theo ngày."),
     ("17/09/2026", "⚙️ Thêm tab \"Cài đặt\" mới (kế bên tab Góp ý) — gom 3 nút bật/tắt giao diện (Tự động theo giờ Hà Nội, Chế độ tối, Thời tiết thật tự động) vào 1 chỗ dễ tìm, khỏi cần mở thanh bên nữa — tiện hơn hẳn trên điện thoại."),
@@ -838,7 +839,8 @@ def hien_tuong_thien_van_hom_nay():
 def _make_starfield_html(hien_tuong):
     """Tạo nền bầu trời sao cho Chế độ tối: các chấm sao lấp lánh (kỹ thuật box-shadow,
     không cần JavaScript) + hiện tượng thiên văn riêng của ngày hôm đó (sao băng / sao chổi
-    — dải Ngân Hà thì vẽ riêng bằng CSS, không cần HTML sinh ra ở đây).
+    — dải Ngân Hà thì vẽ riêng ở hàm _dai_ngan_ha_hat() bên dưới, dùng cùng kỹ thuật
+    box-shadow nhưng rắc dày đặc bên trong dải cho chân thật hơn).
 
     LƯU Ý HIỆU NĂNG: bản trước dùng 235 chấm sao + 60 sao băng chạy hoạt ảnh liên tục,
     trên điện thoại yếu (CPU/GPU chậm) sẽ khiến trang tải/cuộn ì. Đã giảm bớt số lượng
@@ -880,11 +882,33 @@ def _make_starfield_html(hien_tuong):
     return stars_small, stars_medium, stars_large, hien_tuong_html
 
 
+def _dai_ngan_ha_hat(n=150):
+    """Rắc thêm thật nhiều sao li ti NGAY TRONG dải Ngân Hà (cùng kỹ thuật box-shadow như bầu
+    trời sao chính, không cần thêm phần tử/JavaScript nào) — dày đặc ở giữa dải, thưa dần ra 2
+    mép trên dưới (random.gauss) giống ảnh chụp Ngân Hà thật: nhìn kỹ sẽ thấy dải sáng đó thật
+    ra được TẠO THÀNH từ vô số ngôi sao chứ không phải 1 vệt mờ tô trơn như trước."""
+    diem = []
+    for _ in range(n):
+        x = round(random.uniform(-5, 175), 2)  # trải dọc chiều dài dải (170vw)
+        y = round(min(max(random.gauss(27.5, 11), -6), 61), 2)  # dày giữa dải (55vh), thưa 2 mép
+        do_sang = random.choice(["#fff", "#fff", "#fff", "#fefce8", "#e0e7ff"])  # đa số trắng, xen kẽ ánh vàng/xanh nhạt cho đỡ đều màu
+        diem.append(f"{x}vw {y}vh {do_sang}")
+    return ", ".join(diem)
+
+
 if dark_mode:
     HIEN_TUONG_DEM = hien_tuong_thien_van_hom_nay()
     ST_SMALL, ST_MEDIUM, ST_LARGE, HIEN_TUONG_HTML = _make_starfield_html(HIEN_TUONG_DEM)
     DANG_CO_NGAN_HA = HIEN_TUONG_DEM == "ngan_ha"
-    NGAN_HA_HTML = '<div class="ngan-ha"></div>' if DANG_CO_NGAN_HA else ''
+    if DANG_CO_NGAN_HA:
+        NGAN_HA_HAT_BOXSHADOW = _dai_ngan_ha_hat()
+        NGAN_HA_HTML = (
+            '<div class="ngan-ha">'
+            f'<div class="ngan-ha-hat" style="box-shadow:{NGAN_HA_HAT_BOXSHADOW};"></div>'
+            '</div>'
+        )
+    else:
+        NGAN_HA_HTML = ''
 
 # ---------------------------------------------------------------
 # CSS — giao diện
@@ -1289,7 +1313,8 @@ if dark_mode:
         @media (prefers-reduced-motion: reduce) {{
             .stars-small, .stars-medium, .stars-large, .shooting-star, .comet, .moon {{ animation: none !important; }}
             .shooting-star, .comet {{ opacity: 0 !important; }}
-            .ngan-ha {{ animation: none !important; opacity: 0.6 !important; }}
+            .ngan-ha::before, .ngan-ha::after, .ngan-ha-hat {{ animation: none !important; }}
+            .ngan-ha {{ opacity: 0.6 !important; }}
         }}
 
         /* --- Sao chổi: hiện tượng riêng của Thứ 4/6/CN — đầu sáng rực + đuôi dài ánh xanh,
@@ -1316,21 +1341,48 @@ if dark_mode:
             .comet {{ width: 150px; }}
         }}
 
-        /* --- Dải Ngân Hà: chỉ hiện riêng vào Thứ 2, 1 dải sáng mờ chéo qua bầu trời, sáng mờ
-           dần lên xuống nhẹ nhàng — chỉ 1 lớp phủ (không sinh nhiều phần tử) nên vẫn nhẹ máy. --- */
+        /* --- Dải Ngân Hà (chân thật hơn bản cũ): trước đây chỉ là 1 vệt gradient mờ tô trơn,
+           nhìn giả; giờ tách làm 3 lớp chồng nhau giống ảnh chụp thiên văn thật —
+           (1) ::before = ánh sáng mờ lan toả của dải (khí + bụi sao phát sáng, có blur),
+           (2) ::after  = vài đám bụi vũ trụ tối màu cắt ngang (dark dust lane — đặc trưng dễ
+               nhận ra nhất của ảnh chụp Ngân Hà thật, ảnh cũ hoàn toàn không có),
+           (3) .ngan-ha-hat (con, KHÔNG blur) = hàng trăm chấm sao li ti rắc dày ở giữa dải,
+               thưa dần ra 2 mép — để mắt thấy rõ dải sáng đó được TẠO THÀNH từ vô số ngôi sao
+               chứ không phải 1 vệt sơn mờ. Cả 3 lớp cùng nằm trong 1 khối xoay -25deg nên luôn
+               thẳng hàng với nhau; vẫn chỉ thuần CSS, không JavaScript, không sinh thêm nhiều
+               phần tử nên điện thoại yếu vẫn chạy mượt. --- */
         .ngan-ha {{
             position: fixed; top: -25vh; left: -25vw; width: 170vw; height: 55vh;
             transform: rotate(-25deg); pointer-events: none;
+        }}
+        .ngan-ha::before {{
+            content: ""; position: absolute; inset: 0;
             background: linear-gradient(90deg,
-                transparent 0%, rgba(199,210,254,0.16) 15%, rgba(255,255,255,0.4) 38%,
-                rgba(216,180,254,0.3) 55%, rgba(199,210,254,0.18) 75%, transparent 100%);
-            filter: blur(5px);
+                transparent 0%, rgba(199,210,254,0.15) 13%, rgba(255,250,230,0.46) 38%,
+                rgba(255,255,255,0.36) 50%, rgba(216,180,254,0.3) 62%, rgba(199,210,254,0.16) 78%,
+                transparent 100%);
+            filter: blur(7px);
             animation: ngan-ha-sang 7s ease-in-out infinite;
+        }}
+        .ngan-ha::after {{
+            content: ""; position: absolute; inset: 0;
+            background:
+                radial-gradient(ellipse 16% 55% at 34% 60%, rgba(8,8,20,0.35), transparent 70%),
+                radial-gradient(ellipse 12% 45% at 61% 38%, rgba(8,8,20,0.28), transparent 70%),
+                radial-gradient(ellipse 10% 40% at 82% 55%, rgba(8,8,20,0.22), transparent 70%);
+            filter: blur(3px);
+            animation: ngan-ha-sang 7s ease-in-out infinite;
+        }}
+        .ngan-ha-hat {{
+            position: absolute; top: 0; left: 0; width: 1px; height: 1px;
+            border-radius: 50%; background: transparent;
+            animation: ngan-ha-lap-lanh 4s ease-in-out infinite alternate;
         }}
         @keyframes ngan-ha-sang {{
             0%, 100% {{ opacity: 0.55; }}
             50% {{ opacity: 0.9; }}
         }}
+        @keyframes ngan-ha-lap-lanh {{ from {{ opacity: 0.5; }} to {{ opacity: 1; }} }}
 
         /* --- Mặt trăng: hình tròn vẽ bằng CSS (radial-gradient + vài "miệng hố" bằng
            box-shadow), có quầng sáng nhẹ nhàng lên xuống cho sinh động. Phần khuyết
