@@ -34,7 +34,6 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
-    ("18/09/2026", "✈️ Thêm hiệu ứng máy bay: thỉnh thoảng có 1-2 chiếc bay chéo qua góc trời rồi biến mất, quanh năm không cần dịp gì đặc biệt. Ban ngày bay trơn không đèn, ban đêm có thêm đèn tín hiệu nhấp nháy trên thân giống máy bay thật. Admin chỉnh được tần suất (tắt hẳn/hiếm/thỉnh thoảng/dày đặc) ở tab Admin."),
     ("18/09/2026", "🌌 Làm lại dải Ngân Hà cho dịu mắt hơn hẳn: bỏ hẳn mấy đám \"bụi vũ trụ\" tối màu (nhìn giống vết bẩn loang lổ), bỏ luôn tông màu tím sặc sỡ, thay bằng 1 quầng sáng mềm mại tự nhoè đều mọi hướng (không còn bị cắt cạnh như trước) — nhẹ nhàng, tự nhiên hơn nhiều."),
     ("18/09/2026", "🔐 Admin có thể KHOÁ điểm 1 hoặc nhiều bạn (đặt kèm mật khẩu riêng): điểm bạn đó biến mất khỏi bảng xếp hạng, lịch sử cộng/trừ, nhật ký hoạt động, tổng điểm cả nhóm và file Excel/PDF xuất ra — chỉ ai nhập đúng mật khẩu ở Trang chủ mới xem lại được, riêng Admin thì luôn thấy hết. Quản lý khoá/mở khoá và đổi mật khẩu ngay trong tab Admin."),
     ("18/09/2026", "🎊 Tab Admin có thêm mục \"Ngày lễ tuỳ chỉnh\": Admin tự thêm 1 ngày cụ thể trong tương lai (sinh nhật nhóm, ngày thi xong, ngày kỷ niệm lớp...) kèm chọn hiệu ứng riêng (thiên văn/tuyết/pháo hoa/trình diễn drone với chữ tuỳ ý) cho đúng ngày đó — không cần sửa code, tới ngày tự bật rồi tự tắt luôn, khỏi cần nhớ tắt tay. Ngày đã thêm cũng tự xuất hiện trong mục báo trước 2 ngày ở Trang chủ. Admin có thể xoá bất kỳ ngày nào đã thêm."),
@@ -783,7 +782,6 @@ CUONG_CHE_THIEN_VAN = CAI_DAT_HE_THONG.get("cuong_che_thien_van", "")  # "" / sa
 CUONG_CHE_PHAO_HOA = CAI_DAT_HE_THONG.get("cuong_che_phao_hoa", "") == "1"
 CUONG_CHE_DRONE = CAI_DAT_HE_THONG.get("cuong_che_drone", "") == "1"
 CUONG_CHE_DRONE_CHU = CAI_DAT_HE_THONG.get("cuong_che_drone_chu", "") or "Chào mừng!"
-TAN_SUAT_MAY_BAY = CAI_DAT_HE_THONG.get("tan_suat_may_bay", "hiem")  # tat / hiem / vua / day
 
 # --- Ngày lễ TUỲ CHỈNH do Admin tự thêm (sinh nhật nhóm, ngày thi xong, v.v. — xem tab Admin) ---
 NGAY_LE_TUY_CHINH_DF = load_ngay_le_tuy_chinh()
@@ -1782,87 +1780,6 @@ if DANG_MUA:
     </style>
     <div class="mua-overlay"></div>{SET_HTML}
     """, unsafe_allow_html=True)
-
-
-# ---------------------------------------------------------------------------
-# MÁY BAY BAY NGANG QUA (hiệu ứng nền quanh năm, không cần dịp lễ gì) — thỉnh thoảng có 1-2 (hoặc
-# 3 nếu Admin chọn dày đặc) chiếc bay chéo qua góc trời rồi biến mất, thuần CSS (emoji ✈️ xoay
-# theo hướng bay + hoạt ảnh translate/opacity, KHÔNG JavaScript). Hiện y hệt cả Chế độ sáng lẫn
-# tối, CHỈ khác 1 điểm: ban ngày bay "trơn" không đèn, ban đêm có thêm 1 đèn tín hiệu nhấp nháy
-# trên thân — dùng luôn biến dark_mode có sẵn của cả trang, không cần logic riêng.
-#
-# TẦN SUẤT bay lấy từ cài đặt của Admin (TAN_SUAT_MAY_BAY, xem tab Admin) — "tat" thì không vẽ
-# gì cả, các mức còn lại chỉ đổi độ DÀI chu kỳ (bay thưa/dày) + số lượng máy bay cùng lúc.
-# ---------------------------------------------------------------------------
-_TAN_SUAT_MAY_BAY_THONG_SO = {
-    "hiem": (2, 150, 220),   # (số máy bay, chu kỳ ngắn nhất, chu kỳ dài nhất) tính bằng giây
-    "vua": (2, 70, 110),
-    "day": (3, 25, 45),
-}
-
-
-def _tao_may_bay(dem, tan_suat):
-    if tan_suat == "tat":
-        return ""
-    so_may_bay, chu_ky_min, chu_ky_max = _TAN_SUAT_MAY_BAY_THONG_SO.get(tan_suat, _TAN_SUAT_MAY_BAY_THONG_SO["hiem"])
-    parts = []
-    for i in range(so_may_bay):
-        chu_ky = round(random.uniform(chu_ky_min, chu_ky_max), 1)  # giây/chu kỳ — càng dài càng "lâu lâu" mới thấy 1 lần
-        delay = round(random.uniform(0, chu_ky), 1)  # âm ngẫu nhiên -> mỗi chiếc lệch pha nhau, khỏi bay chung 1 lúc
-        top = round(random.uniform(8, 42), 1)
-        huong = "trai-phai" if i % 2 == 0 else "phai-trai"
-        lop_den = " may-bay-den" if dem else ""
-        parts.append(
-            f'<div class="may-bay may-bay-{huong}{lop_den}" '
-            f'style="top:{top}vh; animation-duration:{chu_ky}s; animation-delay:-{delay}s;">✈️</div>'
-        )
-    return "".join(parts)
-
-
-MAY_BAY_HTML = _tao_may_bay(dark_mode, TAN_SUAT_MAY_BAY)
-st.markdown(f"""
-<style>
-    .may-bay {{
-        position: fixed; font-size: 22px; opacity: 0; pointer-events: none;
-        animation-timing-function: linear; animation-iteration-count: infinite;
-        filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25));
-    }}
-    .may-bay-trai-phai {{ left: -8vw; animation-name: bay-may-bay-trai-phai; }}
-    .may-bay-phai-trai {{ right: -8vw; animation-name: bay-may-bay-phai-trai; }}
-    @keyframes bay-may-bay-trai-phai {{
-        0%, 92% {{ opacity: 0; transform: translate(0, 0) rotate(20deg); }}
-        93% {{ opacity: 1; }}
-        97% {{ opacity: 1; transform: translate(116vw, -34vh) rotate(20deg); }}
-        100% {{ opacity: 0; transform: translate(124vw, -38vh) rotate(20deg); }}
-    }}
-    @keyframes bay-may-bay-phai-trai {{
-        0%, 92% {{ opacity: 0; transform: translate(0, 0) rotate(200deg); }}
-        93% {{ opacity: 1; }}
-        97% {{ opacity: 1; transform: translate(-116vw, 34vh) rotate(200deg); }}
-        100% {{ opacity: 0; transform: translate(-124vw, 38vh) rotate(200deg); }}
-    }}
-    /* Đèn tín hiệu CHỈ có ban đêm — 1 chấm trắng nhấp nháy trên thân máy bay, giống đèn báo
-       hiệu máy bay thật lúc trời tối; ban ngày không thêm gì (bay "trơn" không đèn). */
-    .may-bay-den::after {{
-        content: ""; position: absolute; top: 45%; left: 45%; width: 5px; height: 5px;
-        border-radius: 50%; background: #fff;
-        box-shadow: 0 0 6px 2px rgba(255,255,255,0.9);
-        animation: may-bay-den-nhay 1.4s steps(1, end) infinite;
-    }}
-    @keyframes may-bay-den-nhay {{
-        0%, 100% {{ opacity: 0; }}
-        10%, 25% {{ opacity: 1; }}
-        35% {{ opacity: 0; }}
-    }}
-    @media (max-width: 640px) {{
-        .may-bay {{ font-size: 16px; }}
-    }}
-    @media (prefers-reduced-motion: reduce) {{
-        .may-bay {{ animation: none !important; opacity: 0 !important; }}
-    }}
-</style>
-<div>{MAY_BAY_HTML}</div>
-""", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -3018,29 +2935,6 @@ if is_admin:
         if _bat_drone != CUONG_CHE_DRONE or (_bat_drone and _chu_drone_luu != CUONG_CHE_DRONE_CHU):
             luu_cai_dat_he_thong("cuong_che_drone", "1" if _bat_drone else "")
             luu_cai_dat_he_thong("cuong_che_drone_chu", _chu_drone_luu)
-            st.rerun()
-
-        st.write("")
-        st.markdown("##### ✈️ Máy bay bay ngang")
-        st.caption("Chỉnh mật độ máy bay bay qua góc trời — hiện quanh năm, không liên quan ngày lễ gì.")
-        _TUY_CHON_TAN_SUAT_MAY_BAY = {
-            "tat": "🚫 Tắt hẳn",
-            "hiem": "🐢 Hiếm (mặc định)",
-            "vua": "🙂 Thỉnh thoảng",
-            "day": "🐇 Dày đặc",
-        }
-        _ds_khoa_tan_suat_may_bay = list(_TUY_CHON_TAN_SUAT_MAY_BAY.keys())
-        _lua_chon_tan_suat_may_bay = st.selectbox(
-            "Tần suất máy bay:",
-            options=_ds_khoa_tan_suat_may_bay,
-            format_func=lambda k: _TUY_CHON_TAN_SUAT_MAY_BAY[k],
-            index=_ds_khoa_tan_suat_may_bay.index(
-                TAN_SUAT_MAY_BAY if TAN_SUAT_MAY_BAY in _ds_khoa_tan_suat_may_bay else "hiem"
-            ),
-            key="chon_tan_suat_may_bay",
-        )
-        if _lua_chon_tan_suat_may_bay != TAN_SUAT_MAY_BAY:
-            luu_cai_dat_he_thong("tan_suat_may_bay", _lua_chon_tan_suat_may_bay)
             st.rerun()
 
         st.write("")
