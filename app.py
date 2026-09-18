@@ -34,6 +34,8 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("18/09/2026", "🔐 Admin có thể KHOÁ điểm 1 hoặc nhiều bạn (đặt kèm mật khẩu riêng): điểm bạn đó biến mất khỏi bảng xếp hạng, lịch sử cộng/trừ, nhật ký hoạt động, tổng điểm cả nhóm và file Excel/PDF xuất ra — chỉ ai nhập đúng mật khẩu ở Trang chủ mới xem lại được, riêng Admin thì luôn thấy hết. Quản lý khoá/mở khoá và đổi mật khẩu ngay trong tab Admin."),
+    ("18/09/2026", "🎊 Tab Admin có thêm mục \"Ngày lễ tuỳ chỉnh\": Admin tự thêm 1 ngày cụ thể trong tương lai (sinh nhật nhóm, ngày thi xong, ngày kỷ niệm lớp...) kèm chọn hiệu ứng riêng (thiên văn/tuyết/pháo hoa/trình diễn drone với chữ tuỳ ý) cho đúng ngày đó — không cần sửa code, tới ngày tự bật rồi tự tắt luôn, khỏi cần nhớ tắt tay. Ngày đã thêm cũng tự xuất hiện trong mục báo trước 2 ngày ở Trang chủ. Admin có thể xoá bất kỳ ngày nào đã thêm."),
     ("18/09/2026", "🌌 Dải Ngân Hà chân thật hơn hẳn: trước đây chỉ là 1 vệt mờ tô trơn, giờ có thêm hàng trăm ngôi sao li ti rắc dày ở giữa dải (thưa dần ra 2 mép) để thấy rõ dải sáng đó được tạo thành từ vô số ngôi sao, cộng thêm vài đám bụi vũ trụ tối màu cắt ngang (dark dust lane) giống hệt ảnh chụp thiên văn thật — vẫn thuần CSS, không ảnh hưởng gì tốc độ trang."),
     ("17/09/2026", "🎆🧧 Thêm Tết Dương Lịch (1/1) và Tết Nguyên Đán vào hệ thống ngày lễ: 20 phút cuối trước giao thừa có drone đếm ngược phút:giây ngay trên Trang chủ, đúng giao thừa thì tự chuyển qua bắn pháo hoa suốt đêm giao thừa. Tết Nguyên Đán tự động đúng ngày cho các năm 2027, 2028, 2029 (đã tra cứu sẵn). Thêm luôn tính năng báo trước trên Trang chủ: còn 2 ngày trở xuống là tới bất kỳ ngày lễ nào đã lập trình (Giáng Sinh/20-11/Trung Thu/Tết Dương/Tết Ta) thì tự hiện thông báo đếm ngày, không cần bấm gì."),
     ("17/09/2026", "🎄🚁 Thêm trang trí theo ngày lễ: Giáng Sinh (24-25/12) có tuyết rơi cả ngày lẫn đêm, riêng ban đêm có thêm dải Ngân Hà + pháo hoa; 20/11 và Tết Trung Thu có \"trình diễn drone\" (dòng chữ phát sáng lấp lánh) hiện 2 phút/ẩn 3 phút xen kẽ đều đặn, ghi \"Chúc mừng 20/11\" hoặc \"Tết Trung Thu\". Thêm tab \"🔒 Admin\" (chỉ Admin thấy) để cưỡng chế bật bất kỳ hiệu ứng nào (thiên văn/pháo hoa/drone với chữ tuỳ ý) cho MỌI người xem bất kể ngày gì, tắt cưỡng chế là tự quay lại đúng theo ngày."),
@@ -70,6 +72,10 @@ def init_db():
                 diem INTEGER NOT NULL DEFAULT 0
             )
         """))
+        # Cho phép Admin KHOÁ điểm 1 thành viên (ẩn số điểm khỏi bảng xếp hạng công khai, chỉ ai
+        # nhập đúng mật khẩu riêng mới xem được — xem tab Admin) — dùng khi có bạn bị điểm quá
+        # thấp, tránh mọi người thấy con số gây ngại.
+        s.execute(text("ALTER TABLE members ADD COLUMN IF NOT EXISTS diem_bi_khoa BOOLEAN NOT NULL DEFAULT FALSE"))
         s.execute(text("""
             CREATE TABLE IF NOT EXISTS history (
                 id SERIAL PRIMARY KEY,
@@ -125,6 +131,22 @@ def init_db():
                 gia_tri TEXT
             )
         """))
+        # Ngày lễ TUỲ CHỈNH do Admin tự thêm (sinh nhật nhóm, ngày thi xong, v.v.) — mỗi dòng là
+        # 1 ngày cụ thể trong tương lai + những hiệu ứng muốn bật riêng cho ngày đó, không cần
+        # sửa code như các ngày lễ có sẵn (Giáng Sinh/20-11/Trung Thu/Tết).
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS ngay_le_tuy_chinh (
+                id SERIAL PRIMARY KEY,
+                ngay DATE NOT NULL,
+                ten TEXT NOT NULL,
+                thien_van TEXT,
+                tuyet BOOLEAN NOT NULL DEFAULT FALSE,
+                phao_hoa BOOLEAN NOT NULL DEFAULT FALSE,
+                drone BOOLEAN NOT NULL DEFAULT FALSE,
+                drone_chu TEXT,
+                tao_luc TIMESTAMP NOT NULL DEFAULT now()
+            )
+        """))
         s.commit()
 
 
@@ -158,7 +180,15 @@ _gieo_tkb_neu_trong()
 
 # --- Truy vấn dữ liệu -----------------------------------------------------
 def load_members():
-    return conn.query("SELECT name, diem FROM members ORDER BY diem DESC, name", ttl=0)
+    return conn.query("SELECT name, diem, diem_bi_khoa FROM members ORDER BY diem DESC, name", ttl=0)
+
+
+def dat_khoa_diem(name, khoa):
+    """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi). khoa=True: khoá điểm
+    (ẩn khỏi bảng xếp hạng công khai); khoa=False: mở khoá lại (hiện bình thường)."""
+    with conn.session as s:
+        s.execute(text("UPDATE members SET diem_bi_khoa = :khoa WHERE name = :ten"), {"khoa": khoa, "ten": name})
+        s.commit()
 
 
 def load_history(name, start=None, end=None):
@@ -469,6 +499,43 @@ def luu_cai_dat_he_thong(khoa, gia_tri):
     load_cai_dat_he_thong.clear()
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def load_ngay_le_tuy_chinh():
+    """Đọc toàn bộ ngày lễ TUỲ CHỈNH do Admin tự thêm (sinh nhật nhóm, ngày thi xong, v.v.) —
+    ít khi đổi nên cache 30 giây cho nhẹ database, Admin thêm/xoá thì tự xoá cache ngay
+    (xem them_ngay_le_tuy_chinh() / xoa_ngay_le_tuy_chinh() bên dưới)."""
+    return conn.query(
+        "SELECT id, ngay, ten, thien_van, tuyet, phao_hoa, drone, drone_chu "
+        "FROM ngay_le_tuy_chinh ORDER BY ngay",
+        ttl=0,
+    )
+
+
+def them_ngay_le_tuy_chinh(ngay, ten, thien_van, tuyet, phao_hoa, drone, drone_chu):
+    """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi)."""
+    with conn.session as s:
+        s.execute(
+            text(
+                "INSERT INTO ngay_le_tuy_chinh (ngay, ten, thien_van, tuyet, phao_hoa, drone, drone_chu) "
+                "VALUES (:ngay, :ten, :tv, :tuyet, :ph, :dr, :dc)"
+            ),
+            {
+                "ngay": ngay, "ten": ten, "tv": thien_van or None,
+                "tuyet": tuyet, "ph": phao_hoa, "dr": drone, "dc": drone_chu or None,
+            },
+        )
+        s.commit()
+    load_ngay_le_tuy_chinh.clear()
+
+
+def xoa_ngay_le_tuy_chinh(id_ngay_le):
+    """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi)."""
+    with conn.session as s:
+        s.execute(text("DELETE FROM ngay_le_tuy_chinh WHERE id = :id"), {"id": id_ngay_le})
+        s.commit()
+    load_ngay_le_tuy_chinh.clear()
+
+
 def add_news(noi_dung):
     """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi)."""
     with conn.session as s:
@@ -715,15 +782,51 @@ CUONG_CHE_PHAO_HOA = CAI_DAT_HE_THONG.get("cuong_che_phao_hoa", "") == "1"
 CUONG_CHE_DRONE = CAI_DAT_HE_THONG.get("cuong_che_drone", "") == "1"
 CUONG_CHE_DRONE_CHU = CAI_DAT_HE_THONG.get("cuong_che_drone_chu", "") or "Chào mừng!"
 
-HIEU_UNG_TUYET = IS_GIANG_SINH  # tuyết rơi cả ngày lẫn đêm dịp Giáng Sinh
-HIEU_UNG_PHAO_HOA = CUONG_CHE_PHAO_HOA or (IS_GIANG_SINH and dark_mode) or IS_TET_TAY or IS_TET_TA
-HIEU_UNG_DRONE = CUONG_CHE_DRONE or IS_20_11 or IS_TRUNG_THU
+# --- Ngày lễ TUỲ CHỈNH do Admin tự thêm (sinh nhật nhóm, ngày thi xong, v.v. — xem tab Admin) ---
+NGAY_LE_TUY_CHINH_DF = load_ngay_le_tuy_chinh()
+if not NGAY_LE_TUY_CHINH_DF.empty:
+    # Cột DATE từ Postgres tùy lúc trả về date, tùy lúc trả về Timestamp -> chuẩn hoá về date
+    # hết cho chắc ăn trước khi so sánh (xem _chuan_hoa_ngay() định nghĩa phía trên).
+    NGAY_LE_TUY_CHINH_DF = NGAY_LE_TUY_CHINH_DF.copy()
+    NGAY_LE_TUY_CHINH_DF["ngay"] = NGAY_LE_TUY_CHINH_DF["ngay"].apply(_chuan_hoa_ngay)
+_NGAY_LE_TUY_CHINH_HOM_NAY = (
+    NGAY_LE_TUY_CHINH_DF[NGAY_LE_TUY_CHINH_DF["ngay"] == _NGAY_HOM_NAY]
+    if not NGAY_LE_TUY_CHINH_DF.empty else NGAY_LE_TUY_CHINH_DF
+)
+IS_NGAY_LE_TUY_CHINH = not _NGAY_LE_TUY_CHINH_HOM_NAY.empty
+# Có thể lỡ trùng ngày 2 dịp tuỳ chỉnh khác nhau -> gộp hiệu ứng của TẤT CẢ các dòng trùng ngày đó.
+# LƯU Ý: cột thien_van/drone_chu để trống thì Postgres trả NULL, mà pandas hay đọc NULL của cột
+# object thành float("nan") chứ không phải None — và nan lại "truthy" trong Python (bool(nan) ==
+# True) nên "if tv" hay "if dc" là SAI, dễ bị dính giá trị rỗng; phải kiểm tra isinstance(..., str)
+# cho chắc mới lọc đúng được các dòng thật sự có nhập giá trị.
+_THIEN_VAN_HOP_LE = ("sao_bang", "sao_choi", "ngan_ha")
+NGAY_LE_TUY_CHINH_THIEN_VAN = (
+    next((tv for tv in _NGAY_LE_TUY_CHINH_HOM_NAY["thien_van"] if isinstance(tv, str) and tv in _THIEN_VAN_HOP_LE), "")
+    if IS_NGAY_LE_TUY_CHINH else ""
+)
+NGAY_LE_TUY_CHINH_TUYET = IS_NGAY_LE_TUY_CHINH and bool(_NGAY_LE_TUY_CHINH_HOM_NAY["tuyet"].any())
+NGAY_LE_TUY_CHINH_PHAO_HOA = IS_NGAY_LE_TUY_CHINH and bool(_NGAY_LE_TUY_CHINH_HOM_NAY["phao_hoa"].any())
+NGAY_LE_TUY_CHINH_DRONE = IS_NGAY_LE_TUY_CHINH and bool(_NGAY_LE_TUY_CHINH_HOM_NAY["drone"].any())
+NGAY_LE_TUY_CHINH_TEN = ", ".join(_NGAY_LE_TUY_CHINH_HOM_NAY["ten"]) if IS_NGAY_LE_TUY_CHINH else ""
+NGAY_LE_TUY_CHINH_DRONE_CHU = (
+    next((dc for dc in _NGAY_LE_TUY_CHINH_HOM_NAY["drone_chu"] if isinstance(dc, str) and dc.strip()), "")
+    if IS_NGAY_LE_TUY_CHINH else ""
+)
+
+HIEU_UNG_TUYET = IS_GIANG_SINH or NGAY_LE_TUY_CHINH_TUYET  # tuyết rơi cả ngày lẫn đêm
+HIEU_UNG_PHAO_HOA = (
+    CUONG_CHE_PHAO_HOA or (IS_GIANG_SINH and dark_mode) or IS_TET_TAY or IS_TET_TA
+    or NGAY_LE_TUY_CHINH_PHAO_HOA
+)
+HIEU_UNG_DRONE = CUONG_CHE_DRONE or IS_20_11 or IS_TRUNG_THU or NGAY_LE_TUY_CHINH_DRONE
 if CUONG_CHE_DRONE:
     NOI_DUNG_DRONE = CUONG_CHE_DRONE_CHU
 elif IS_20_11:
     NOI_DUNG_DRONE = "Chúc mừng 20/11"
 elif IS_TRUNG_THU:
     NOI_DUNG_DRONE = "Tết Trung Thu"
+elif NGAY_LE_TUY_CHINH_DRONE:
+    NOI_DUNG_DRONE = NGAY_LE_TUY_CHINH_DRONE_CHU or NGAY_LE_TUY_CHINH_TEN or "Chúc mừng!"
 else:
     NOI_DUNG_DRONE = ""
 
@@ -769,6 +872,11 @@ _CAC_NGAY_LE_DA_LAP_TRINH = [
     ("🎆 Tết Dương Lịch", NGAY_TET_TAY_TOI),
     ("🧧 Tết Nguyên Đán", NGAY_TET_TA_TOI),
 ]
+if not NGAY_LE_TUY_CHINH_DF.empty:
+    # Ngày lễ tuỳ chỉnh của Admin — chỉ ngày SẮP TỚI (đã qua rồi thì thôi, không báo lại).
+    for _, _dong in NGAY_LE_TUY_CHINH_DF.iterrows():
+        if _dong["ngay"] >= _NGAY_HOM_NAY:
+            _CAC_NGAY_LE_DA_LAP_TRINH.append((f"🎊 {_dong['ten']}", _dong["ngay"]))
 LE_SAP_TOI_TRANG_CHU = [
     (ten, ngay, (ngay - _NGAY_HOM_NAY).days)
     for ten, ngay in _CAC_NGAY_LE_DA_LAP_TRINH
@@ -828,11 +936,14 @@ def hien_tuong_thien_van_hom_nay():
     theo thứ trong tuần (giờ Hà Nội), ai mở web cùng ngày cũng thấy giống nhau:
     Thứ 2 = dải Ngân Hà, các ngày còn lại xen kẽ sao băng / sao chổi.
     Admin cưỡng chế (CUONG_CHE_THIEN_VAN) thì LUÔN thắng; kế đến là đêm Giáng Sinh (luôn dải
-    Ngân Hà); còn không thì mới tính theo thứ trong tuần như bình thường."""
+    Ngân Hà); kế đến là ngày lễ tuỳ chỉnh của Admin (nếu có chọn hiện tượng thiên văn riêng);
+    còn không thì mới tính theo thứ trong tuần như bình thường."""
     if CUONG_CHE_THIEN_VAN in ("sao_bang", "sao_choi", "ngan_ha"):
         return CUONG_CHE_THIEN_VAN
     if IS_GIANG_SINH:
         return "ngan_ha"
+    if NGAY_LE_TUY_CHINH_THIEN_VAN in ("sao_bang", "sao_choi", "ngan_ha"):
+        return NGAY_LE_TUY_CHINH_THIEN_VAN
     return _TEN_HIEN_TUONG_THEO_THU[datetime.now(GIO_HA_NOI).weekday()]
 
 
@@ -1175,6 +1286,7 @@ st.markdown(f"""
     .score-pill.positive {{ background: #dcfce7; color: #15803d; }}
     .score-pill.negative {{ background: #fee2e2; color: #b91c1c; }}
     .score-pill.zero {{ background: #f1f5f9; color: #475569; }}
+    .score-pill.khoa, .podium-score.khoa {{ background: #e2e8f0; color: #475569; }}
 
     .progress-track {{ width: 100%; height: 7px; background: {C_TRACK}; border-radius: 999px; margin-top: 10px; overflow: hidden; }}
     .progress-fill {{
@@ -1857,6 +1969,24 @@ def tong_ket_diem(hist_df):
     return int(cong.sum()), int(len(cong)), int(tru.sum()), int(len(tru))
 
 
+def _hien_lich_su_thanh_vien(ten, hist_by_member, bi_khoa):
+    """Vẽ nội dung bên trong ô 'Xem lịch sử của {ten}' — nếu điểm đang bị khoá (và chưa mở khoá)
+    thì chỉ hiện dòng nhắc, không hiện số liệu gì (tổng được cộng/bị trừ cũng nhạy không kém con
+    điểm, nên khoá điểm là khoá luôn cả phần này)."""
+    if bi_khoa:
+        st.caption("🔒 Lịch sử của bạn này đang bị khoá cùng với điểm.")
+        return
+    hist_df = hist_by_member.get(ten, pd.DataFrame())
+    if not hist_df.empty:
+        tong_cong, lan_cong, tong_tru, lan_tru = tong_ket_diem(hist_df)
+        c_tk1, c_tk2 = st.columns(2)
+        c_tk1.metric("➕ Tổng được cộng", f"+{tong_cong}", f"{lan_cong} lần")
+        c_tk2.metric("➖ Tổng bị trừ", f"{tong_tru}", f"{lan_tru} lần")
+        st.dataframe(hist_df, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Chưa có lịch sử cộng/trừ điểm.")
+
+
 def badges_html(name, diem, diem_max, recent_map, extra_class=""):
     badges = compute_badges(recent_map.get(name, []), diem, diem_max)
     if not badges:
@@ -2097,6 +2227,26 @@ with tab_home:
 
     members_df = load_members()
 
+    # --- Khoá điểm (Admin) — điểm của thành viên bị khoá sẽ ẩn khỏi bảng xếp hạng, lịch sử,
+    # nhật ký hoạt động, tổng điểm cả nhóm và file xuất — chỉ Admin hoặc ai nhập đúng mật khẩu
+    # riêng (Admin đặt ở tab Admin) mới xem được. Mở khoá chỉ có hiệu lực cho phiên trình duyệt
+    # hiện tại (đóng web/mở lại phải nhập lại mật khẩu).
+    DANH_SACH_BI_KHOA = (
+        set(members_df.loc[members_df["diem_bi_khoa"] == True, "name"]) if not members_df.empty else set()
+    )
+    MAT_KHAU_KHOA_DIEM = CAI_DAT_HE_THONG.get("mat_khau_khoa_diem", "")
+    DA_MO_KHOA_DIEM = is_admin or st.session_state.get("da_mo_khoa_diem_bi_khoa", False)
+
+    if DANH_SACH_BI_KHOA and not DA_MO_KHOA_DIEM:
+        with st.expander(f"🔒 Có {len(DANH_SACH_BI_KHOA)} bạn đang bị khoá điểm — nhập mật khẩu để xem"):
+            _mk_nhap_khoa = st.text_input("Mật khẩu:", type="password", key="nhap_mk_khoa_diem")
+            if st.button("🔓 Mở khoá", key="nut_mo_khoa_diem"):
+                if MAT_KHAU_KHOA_DIEM and _mk_nhap_khoa == MAT_KHAU_KHOA_DIEM:
+                    st.session_state["da_mo_khoa_diem_bi_khoa"] = True
+                    st.rerun()
+                else:
+                    st.error("Sai mật khẩu rồi bạn ơi.")
+
     # --- Mã QR mở nhanh ---
     with st.expander("📱 Mã QR mở nhanh (để chia sẻ cho mọi người quét)"):
         st.image(
@@ -2120,18 +2270,33 @@ with tab_home:
             st.caption("Đang hiển thị toàn bộ lịch sử (chưa lọc theo ngày).")
 
     if not members_df.empty:
+        # Điểm bị khoá thì không tính vào "Tổng điểm" cả nhóm khi chưa mở khoá — nếu không, ai
+        # biết điểm của tất cả những người còn lại vẫn có thể suy ngược ra điểm người bị khoá
+        # bằng phép trừ (đúng cái Admin muốn tránh khi bật khoá điểm).
+        _mem_kpi = (
+            members_df[~members_df["name"].isin(DANH_SACH_BI_KHOA)]
+            if DANH_SACH_BI_KHOA and not DA_MO_KHOA_DIEM else members_df
+        )
         kpi1, kpi2, kpi3 = st.columns(3)
         kpi1.metric("Số thành viên", len(members_df))
-        kpi2.metric("Điểm cao nhất", int(members_df["diem"].max()))
-        kpi3.metric("Tổng điểm", int(members_df["diem"].sum()))
+        kpi2.metric("Điểm cao nhất", int(_mem_kpi["diem"].max()) if not _mem_kpi.empty else 0)
+        kpi3.metric("Tổng điểm", int(_mem_kpi["diem"].sum()) if not _mem_kpi.empty else 0)
 
         muon_xuat_file = st.checkbox(
             "Chuẩn bị file để xuất (Excel / PDF) — chỉ tạo file khi bấm vào đây, giúp trang mở nhanh hơn",
             key="muon_xuat_file",
         )
         if muon_xuat_file:
-            excel_bytes = to_excel_bytes(members_df, load_all_history(start_dt, end_dt))
-            pdf_bytes = to_pdf_bytes(members_df, load_all_history(start_dt, end_dt))
+            if DANH_SACH_BI_KHOA and not DA_MO_KHOA_DIEM:
+                _members_xuat = members_df[~members_df["name"].isin(DANH_SACH_BI_KHOA)].drop(columns=["diem_bi_khoa"])
+                _hist_xuat = load_all_history(start_dt, end_dt)
+                _hist_xuat = _hist_xuat[~_hist_xuat["Thành viên"].isin(DANH_SACH_BI_KHOA)]
+                st.caption(f"🔒 File xuất KHÔNG gồm {len(DANH_SACH_BI_KHOA)} bạn đang bị khoá điểm.")
+            else:
+                _members_xuat = members_df.drop(columns=["diem_bi_khoa"])
+                _hist_xuat = load_all_history(start_dt, end_dt)
+            excel_bytes = to_excel_bytes(_members_xuat, _hist_xuat)
+            pdf_bytes = to_pdf_bytes(_members_xuat, _hist_xuat)
             col_exp1, col_exp2 = st.columns(2)
             with col_exp1:
                 st.download_button(
@@ -2246,37 +2411,42 @@ with tab_home:
             for hang_hien_thi, (idx, row) in enumerate(ranked):
                 rank = idx + 1
                 ten = row["name"]
-                diem = int(row["diem"])
                 top_class = ""
                 badge = MEDALS.get(rank, str(rank))
-                pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
                 chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
-                pct = progress_pct(diem, diem_max)
                 mau_ten = avatar_color(ten)
+                bi_khoa = ten in DANH_SACH_BI_KHOA and not DA_MO_KHOA_DIEM
 
-                card_html = (
-                    f'<div class="rank-card {top_class}" style="--diem-mau: {mau_ten}; animation-delay: {do_tre_the(hang_hien_thi)}s;">'
-                    f'<div class="rank-card-top">'
-                    f'<div class="rank-badge">{badge}</div>'
-                    f'<div class="avatar" style="background: {mau_ten};">{chu_cai_dau}</div>'
-                    f'<div class="member-name">{ten}</div>'
-                    f'<div class="score-pill {pill_class}">{mui_ten_diem(diem)}{diem:+d} điểm</div>'
-                    f'</div>'
-                    f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
-                    f'{badges_html(ten, diem, diem_max, recent_map)}'
-                    f'</div>'
-                )
+                if bi_khoa:
+                    card_html = (
+                        f'<div class="rank-card {top_class}" style="--diem-mau: {mau_ten}; animation-delay: {do_tre_the(hang_hien_thi)}s;">'
+                        f'<div class="rank-card-top">'
+                        f'<div class="rank-badge">{badge}</div>'
+                        f'<div class="avatar" style="background: {mau_ten};">{chu_cai_dau}</div>'
+                        f'<div class="member-name">{ten}</div>'
+                        f'<div class="score-pill khoa">🔒 Đã khoá</div>'
+                        f'</div>'
+                        f'</div>'
+                    )
+                else:
+                    diem = int(row["diem"])
+                    pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
+                    pct = progress_pct(diem, diem_max)
+                    card_html = (
+                        f'<div class="rank-card {top_class}" style="--diem-mau: {mau_ten}; animation-delay: {do_tre_the(hang_hien_thi)}s;">'
+                        f'<div class="rank-card-top">'
+                        f'<div class="rank-badge">{badge}</div>'
+                        f'<div class="avatar" style="background: {mau_ten};">{chu_cai_dau}</div>'
+                        f'<div class="member-name">{ten}</div>'
+                        f'<div class="score-pill {pill_class}">{mui_ten_diem(diem)}{diem:+d} điểm</div>'
+                        f'</div>'
+                        f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
+                        f'{badges_html(ten, diem, diem_max, recent_map)}'
+                        f'</div>'
+                    )
                 st.markdown(card_html, unsafe_allow_html=True)
                 with st.expander(f"Xem lịch sử của {ten}"):
-                    hist_df = hist_by_member.get(ten, pd.DataFrame())
-                    if not hist_df.empty:
-                        tong_cong, lan_cong, tong_tru, lan_tru = tong_ket_diem(hist_df)
-                        c_tk1, c_tk2 = st.columns(2)
-                        c_tk1.metric("➕ Tổng được cộng", f"+{tong_cong}", f"{lan_cong} lần")
-                        c_tk2.metric("➖ Tổng bị trừ", f"{tong_tru}", f"{lan_tru} lần")
-                        st.dataframe(hist_df, use_container_width=True, hide_index=True)
-                    else:
-                        st.caption("Chưa có lịch sử cộng/trừ điểm.")
+                    _hien_lich_su_thanh_vien(ten, hist_by_member, bi_khoa)
         else:
             # --- Không tìm kiếm: hiện bục podium top 3 + danh sách hạng 4 trở đi ---
             top3 = ranked[:3]
@@ -2288,73 +2458,83 @@ with tab_home:
                 for i, (idx, row) in enumerate(top3):
                     rank = idx + 1
                     ten = row["name"]
-                    diem = int(row["diem"])
                     chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
-                    blocks_html += (
-                        f'<div class="podium-block {classes[i]}" style="animation-delay: {i * 0.1}s;">'
-                        f'<div class="podium-medal">{MEDALS.get(rank, "")}</div>'
-                        f'<div class="podium-avatar">{chu_cai_dau}</div>'
-                        f'<div class="podium-name">{ten}</div>'
-                        f'<div class="podium-score">{mui_ten_diem(diem)}{diem:+d} điểm</div>'
-                        f'{badges_html(ten, diem, diem_max, recent_map, "podium-badges")}'
-                        f'</div>'
-                    )
+                    if ten in DANH_SACH_BI_KHOA and not DA_MO_KHOA_DIEM:
+                        blocks_html += (
+                            f'<div class="podium-block {classes[i]}" style="animation-delay: {i * 0.1}s;">'
+                            f'<div class="podium-medal">{MEDALS.get(rank, "")}</div>'
+                            f'<div class="podium-avatar">{chu_cai_dau}</div>'
+                            f'<div class="podium-name">{ten}</div>'
+                            f'<div class="podium-score khoa">🔒 Đã khoá</div>'
+                            f'</div>'
+                        )
+                    else:
+                        diem = int(row["diem"])
+                        blocks_html += (
+                            f'<div class="podium-block {classes[i]}" style="animation-delay: {i * 0.1}s;">'
+                            f'<div class="podium-medal">{MEDALS.get(rank, "")}</div>'
+                            f'<div class="podium-avatar">{chu_cai_dau}</div>'
+                            f'<div class="podium-name">{ten}</div>'
+                            f'<div class="podium-score">{mui_ten_diem(diem)}{diem:+d} điểm</div>'
+                            f'{badges_html(ten, diem, diem_max, recent_map, "podium-badges")}'
+                            f'</div>'
+                        )
                 st.markdown(f'<div class="podium-wrap">{blocks_html}</div>', unsafe_allow_html=True)
 
             for hang_hien_thi, (idx, row) in enumerate(rest):
                 rank = idx + 1
                 ten = row["name"]
-                diem = int(row["diem"])
-                pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
                 chu_cai_dau = ten.strip()[0].upper() if ten.strip() else "?"
-                pct = progress_pct(diem, diem_max)
                 mau_ten = avatar_color(ten)
+                bi_khoa = ten in DANH_SACH_BI_KHOA and not DA_MO_KHOA_DIEM
 
-                card_html = (
-                    f'<div class="rank-card" style="--diem-mau: {mau_ten}; animation-delay: {do_tre_the(hang_hien_thi)}s;">'
-                    f'<div class="rank-card-top">'
-                    f'<div class="rank-badge">{rank}</div>'
-                    f'<div class="avatar" style="background: {mau_ten};">{chu_cai_dau}</div>'
-                    f'<div class="member-name">{ten}</div>'
-                    f'<div class="score-pill {pill_class}">{mui_ten_diem(diem)}{diem:+d} điểm</div>'
-                    f'</div>'
-                    f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
-                    f'{badges_html(ten, diem, diem_max, recent_map)}'
-                    f'</div>'
-                )
+                if bi_khoa:
+                    card_html = (
+                        f'<div class="rank-card" style="--diem-mau: {mau_ten}; animation-delay: {do_tre_the(hang_hien_thi)}s;">'
+                        f'<div class="rank-card-top">'
+                        f'<div class="rank-badge">{rank}</div>'
+                        f'<div class="avatar" style="background: {mau_ten};">{chu_cai_dau}</div>'
+                        f'<div class="member-name">{ten}</div>'
+                        f'<div class="score-pill khoa">🔒 Đã khoá</div>'
+                        f'</div>'
+                        f'</div>'
+                    )
+                else:
+                    diem = int(row["diem"])
+                    pill_class = "positive" if diem > 0 else ("negative" if diem < 0 else "zero")
+                    pct = progress_pct(diem, diem_max)
+                    card_html = (
+                        f'<div class="rank-card" style="--diem-mau: {mau_ten}; animation-delay: {do_tre_the(hang_hien_thi)}s;">'
+                        f'<div class="rank-card-top">'
+                        f'<div class="rank-badge">{rank}</div>'
+                        f'<div class="avatar" style="background: {mau_ten};">{chu_cai_dau}</div>'
+                        f'<div class="member-name">{ten}</div>'
+                        f'<div class="score-pill {pill_class}">{mui_ten_diem(diem)}{diem:+d} điểm</div>'
+                        f'</div>'
+                        f'<div class="progress-track"><div class="progress-fill" style="width:{pct}%;"></div></div>'
+                        f'{badges_html(ten, diem, diem_max, recent_map)}'
+                        f'</div>'
+                    )
                 st.markdown(card_html, unsafe_allow_html=True)
                 with st.expander(f"Xem lịch sử của {ten}"):
-                    hist_df = hist_by_member.get(ten, pd.DataFrame())
-                    if not hist_df.empty:
-                        tong_cong, lan_cong, tong_tru, lan_tru = tong_ket_diem(hist_df)
-                        c_tk1, c_tk2 = st.columns(2)
-                        c_tk1.metric("➕ Tổng được cộng", f"+{tong_cong}", f"{lan_cong} lần")
-                        c_tk2.metric("➖ Tổng bị trừ", f"{tong_tru}", f"{lan_tru} lần")
-                        st.dataframe(hist_df, use_container_width=True, hide_index=True)
-                    else:
-                        st.caption("Chưa có lịch sử cộng/trừ điểm.")
+                    _hien_lich_su_thanh_vien(ten, hist_by_member, bi_khoa)
 
             # Lịch sử của top 3 (đặt dưới cùng để bục podium không quá dài)
             if top3:
                 st.markdown("##### Lịch sử của top 3")
                 for idx, row in top3:
                     ten = row["name"]
+                    bi_khoa = ten in DANH_SACH_BI_KHOA and not DA_MO_KHOA_DIEM
                     with st.expander(f"Xem lịch sử của {ten}"):
-                        hist_df = hist_by_member.get(ten, pd.DataFrame())
-                        if not hist_df.empty:
-                            tong_cong, lan_cong, tong_tru, lan_tru = tong_ket_diem(hist_df)
-                            c_tk1, c_tk2 = st.columns(2)
-                            c_tk1.metric("➕ Tổng được cộng", f"+{tong_cong}", f"{lan_cong} lần")
-                            c_tk2.metric("➖ Tổng bị trừ", f"{tong_tru}", f"{lan_tru} lần")
-                            st.dataframe(hist_df, use_container_width=True, hide_index=True)
-                        else:
-                            st.caption("Chưa có lịch sử cộng/trừ điểm.")
+                        _hien_lich_su_thanh_vien(ten, hist_by_member, bi_khoa)
 
     # --- Nhật ký hoạt động chung ---
     if not members_df.empty:
         st.markdown("---")
         st.subheader("🗞️ Nhật ký hoạt động gần đây")
         recent_activity_df = load_recent_activity(limit=15)
+        if DANH_SACH_BI_KHOA and not DA_MO_KHOA_DIEM:
+            recent_activity_df = recent_activity_df[~recent_activity_df["Thành viên"].isin(DANH_SACH_BI_KHOA)]
         if recent_activity_df.empty:
             st.caption("Chưa có hoạt động cộng/trừ điểm nào.")
         else:
@@ -2369,7 +2549,11 @@ with tab_home:
             key="hien_trend",
         )
         if hien_bieu_do:
-            trend_options = ["Cả nhóm"] + members_df["name"].tolist()
+            _ten_khong_bi_khoa = (
+                [t for t in members_df["name"].tolist() if t not in DANH_SACH_BI_KHOA]
+                if DANH_SACH_BI_KHOA and not DA_MO_KHOA_DIEM else members_df["name"].tolist()
+            )
+            trend_options = ["Cả nhóm"] + _ten_khong_bi_khoa
             trend_pick = st.selectbox("Xem xu hướng của:", trend_options, key="trend_select")
             trend_df = load_trend_series(None if trend_pick == "Cả nhóm" else trend_pick)
             if trend_df.empty:
@@ -2767,3 +2951,116 @@ if is_admin:
             "âm lịch) — năm khác thì vào đúng ngày Trung Thu năm đó, bật cưỡng chế ở trên là được, "
             "khỏi cần sửa code."
         )
+
+        st.markdown("---")
+        st.markdown("##### 🎊 Ngày lễ tuỳ chỉnh")
+        st.caption(
+            "Thêm 1 ngày cụ thể trong tương lai (sinh nhật nhóm, ngày thi xong, ngày kỷ niệm "
+            "lớp...) kèm hiệu ứng muốn bật riêng cho ngày đó — không cần sửa code, tới đúng ngày "
+            "tự bật rồi tự tắt luôn, khỏi cần nhớ tắt tay như cưỡng chế ở trên."
+        )
+        with st.form("them_ngay_le_tuy_chinh_form", clear_on_submit=True):
+            _ten_ngay_le_moi = st.text_input(
+                "Tên dịp:", placeholder="VD: Sinh nhật nhóm, Ngày thi xong...", max_chars=60,
+            )
+            _ngay_le_moi = st.date_input(
+                "Ngày diễn ra:", value=_NGAY_HOM_NAY + timedelta(days=1), min_value=_NGAY_HOM_NAY,
+            )
+            _cot_tv_moi, _cot_tuyet_moi, _cot_ph_moi = st.columns(3)
+            with _cot_tv_moi:
+                _tv_moi = st.selectbox(
+                    "🌌 Thiên văn:", options=_ds_khoa_thien_van,
+                    format_func=lambda k: _TUY_CHON_THIEN_VAN[k], key="ngay_le_moi_tv",
+                )
+            with _cot_tuyet_moi:
+                _tuyet_moi = st.checkbox("❄️ Tuyết rơi", key="ngay_le_moi_tuyet")
+            with _cot_ph_moi:
+                _ph_moi = st.checkbox("🎆 Pháo hoa", key="ngay_le_moi_ph")
+            _drone_moi = st.checkbox("🚁 Trình diễn drone (dòng chữ phát sáng)", key="ngay_le_moi_drone")
+            _drone_chu_moi = st.text_input(
+                "Nội dung chữ drone (chỉ cần điền nếu có bật trình diễn drone ở trên):",
+                max_chars=60, key="ngay_le_moi_drone_chu",
+            )
+            _gui_ngay_le_moi = st.form_submit_button("➕ Thêm ngày lễ này", use_container_width=True)
+            if _gui_ngay_le_moi:
+                if not _ten_ngay_le_moi.strip():
+                    st.error("Nhập tên dịp trước đã nhé.")
+                elif not (_tv_moi or _tuyet_moi or _ph_moi or _drone_moi):
+                    st.error("Chọn ít nhất 1 hiệu ứng cho ngày này chứ (thiên văn/tuyết/pháo hoa/drone).")
+                else:
+                    them_ngay_le_tuy_chinh(
+                        _ngay_le_moi, _ten_ngay_le_moi.strip(), _tv_moi, _tuyet_moi, _ph_moi,
+                        _drone_moi, _drone_chu_moi.strip(),
+                    )
+                    st.success(f"Đã thêm {_ten_ngay_le_moi.strip()} — {_ngay_le_moi.strftime('%d/%m/%Y')}!")
+                    st.rerun()
+
+        if not NGAY_LE_TUY_CHINH_DF.empty:
+            st.caption("📋 Các ngày lễ tuỳ chỉnh đã thêm:")
+            for _, _dong_le in NGAY_LE_TUY_CHINH_DF.iterrows():
+                _da_qua = _dong_le["ngay"] < _NGAY_HOM_NAY
+                _nhan_hieu_ung = []
+                # Cột thien_van/drone_chu để trống thì đọc lại thành float("nan") (NULL của
+                # Postgres) chứ không phải chuỗi rỗng — phải kiểm tra isinstance(..., str) mới
+                # lọc đúng, "if _dong_le['thien_van']" là sai vì nan cũng "truthy".
+                if isinstance(_dong_le["thien_van"], str) and _dong_le["thien_van"] in _TUY_CHON_THIEN_VAN:
+                    _nhan_hieu_ung.append(_TUY_CHON_THIEN_VAN[_dong_le["thien_van"]])
+                if _dong_le["tuyet"]:
+                    _nhan_hieu_ung.append("❄️ Tuyết")
+                if _dong_le["phao_hoa"]:
+                    _nhan_hieu_ung.append("🎆 Pháo hoa")
+                if _dong_le["drone"]:
+                    _chu_drone_hien = (
+                        _dong_le["drone_chu"] if isinstance(_dong_le["drone_chu"], str) and _dong_le["drone_chu"].strip()
+                        else _dong_le["ten"]
+                    )
+                    _nhan_hieu_ung.append(f'🚁 Drone: "{_chu_drone_hien}"')
+                _cot_ten_le, _cot_xoa_le = st.columns([6, 1])
+                with _cot_ten_le:
+                    _nhan_da_qua = " (đã qua)" if _da_qua else ""
+                    st.caption(
+                        f"{'⏳' if _da_qua else '✅'} **{_dong_le['ten']}** — "
+                        f"{_dong_le['ngay'].strftime('%d/%m/%Y')}{_nhan_da_qua}: "
+                        f"{', '.join(_nhan_hieu_ung) if _nhan_hieu_ung else 'không có hiệu ứng'}"
+                    )
+                with _cot_xoa_le:
+                    if st.button("🗑️", key=f"xoa_ngay_le_{_dong_le['id']}", help="Xoá ngày lễ này"):
+                        xoa_ngay_le_tuy_chinh(int(_dong_le["id"]))
+                        st.rerun()
+        else:
+            st.caption("Chưa có ngày lễ tuỳ chỉnh nào.")
+
+        st.markdown("---")
+        st.markdown("##### 🔐 Khoá điểm thành viên")
+        st.caption(
+            "Ẩn điểm của 1 hoặc nhiều bạn khỏi bảng xếp hạng, lịch sử, nhật ký hoạt động, tổng "
+            "điểm cả nhóm và file xuất — chỉ ai nhập đúng mật khẩu bên dưới mới xem lại được (bạn "
+            "Admin thì luôn thấy hết, không cần mật khẩu này). Dùng khi có bạn bị điểm quá thấp, "
+            "tránh cả lớp thấy con số gây ngại."
+        )
+        if members_df.empty:
+            st.caption("Chưa có thành viên nào.")
+        else:
+            _ds_ten_khoa_chon = st.multiselect(
+                "Các bạn đang bị khoá điểm:",
+                options=members_df["name"].tolist(),
+                default=list(DANH_SACH_BI_KHOA),
+                key="chon_thanh_vien_khoa_diem",
+            )
+            if set(_ds_ten_khoa_chon) != DANH_SACH_BI_KHOA:
+                for _ten_khoa_moi in set(_ds_ten_khoa_chon) - DANH_SACH_BI_KHOA:
+                    dat_khoa_diem(_ten_khoa_moi, True)
+                for _ten_mo_khoa in DANH_SACH_BI_KHOA - set(_ds_ten_khoa_chon):
+                    dat_khoa_diem(_ten_mo_khoa, False)
+                st.rerun()
+
+        _mk_khoa_diem_moi = st.text_input(
+            "Mật khẩu xem điểm bị khoá:",
+            value=MAT_KHAU_KHOA_DIEM, type="password", key="chon_mat_khau_khoa_diem",
+            help="Ai nhập đúng mật khẩu này ở Trang chủ sẽ xem lại được điểm những bạn đang bị khoá.",
+        )
+        if _mk_khoa_diem_moi != MAT_KHAU_KHOA_DIEM:
+            luu_cai_dat_he_thong("mat_khau_khoa_diem", _mk_khoa_diem_moi)
+            st.rerun()
+        if DANH_SACH_BI_KHOA and not MAT_KHAU_KHOA_DIEM:
+            st.warning("⚠️ Đang khoá điểm nhưng CHƯA đặt mật khẩu — đặt mật khẩu ở trên để sau này còn mở khoá lại được.")
