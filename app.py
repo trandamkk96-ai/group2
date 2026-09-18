@@ -34,6 +34,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("18/09/2026", "☀️ Đang có lễ hội (Admin bật cưỡng chế thiên văn/pháo hoa/drone, HOẶC đúng ngày lễ thật đang diễn ra) thì thời tiết hiển thị trên web tự động chuyển sang \"nắng đẹp\", dù trời Mỹ Tho ngoài đời đang mưa hay nhiều mây cũng không làm mất không khí vui — hết lễ hội thì tự quay về đúng thời tiết thật như cũ."),
     ("18/09/2026", "📊 File Excel/PDF xuất ra giờ có thêm 3 cột ở bảng điểm: Tổng điểm được cộng (+), Tổng điểm bị trừ (-), và Tổng cả hai — tính đúng theo khoảng lịch sử đang xuất (nếu có lọc theo ngày thì 3 cột này cũng tính riêng theo đúng khoảng đó), khỏi cần tự cộng trừ tay."),
     ("18/09/2026", "🌌 Làm lại dải Ngân Hà cho dịu mắt hơn hẳn: bỏ hẳn mấy đám \"bụi vũ trụ\" tối màu (nhìn giống vết bẩn loang lổ), bỏ luôn tông màu tím sặc sỡ, thay bằng 1 quầng sáng mềm mại tự nhoè đều mọi hướng (không còn bị cắt cạnh như trước) — nhẹ nhàng, tự nhiên hơn nhiều."),
     ("18/09/2026", "🔐 Admin có thể KHOÁ điểm 1 hoặc nhiều bạn (đặt kèm mật khẩu riêng): điểm bạn đó biến mất khỏi bảng xếp hạng, lịch sử cộng/trừ, nhật ký hoạt động, tổng điểm cả nhóm và file Excel/PDF xuất ra — chỉ ai nhập đúng mật khẩu ở Trang chủ mới xem lại được, riêng Admin thì luôn thấy hết. Quản lý khoá/mở khoá và đổi mật khẩu ngay trong tab Admin."),
@@ -782,7 +783,8 @@ def _phan_loai_thoi_tiet(ma):
 
 TRANG_THAI_THOI_TIET = lay_thoi_tiet_my_tho() if tu_dong_thoi_tiet else None
 # None -> dùng mây ngẫu nhiên (dù là vì tắt nút "Thời tiết thật tự động" hay vì gọi API lỗi).
-DANG_MUA = TRANG_THAI_THOI_TIET in ("mua", "mua_to")
+# DANG_MUA được tính CHÍNH THỨC ở phía dưới (sau khi đã biết có đang lễ hội hay không — xem đoạn
+# "LỄ HỘI THÌ TỰ CHUYỂN THỜI TIẾT SANG ĐẸP" bên dưới), vì lễ hội có thể ghi đè TRANG_THAI_THOI_TIET.
 
 # ---------------------------------------------------------------
 # NGÀY LỄ ĐẶC BIỆT — tự động thêm hiệu ứng trang trí riêng cho vài dịp trong năm, cộng thêm
@@ -858,6 +860,21 @@ elif NGAY_LE_TUY_CHINH_DRONE:
     NOI_DUNG_DRONE = NGAY_LE_TUY_CHINH_DRONE_CHU or NGAY_LE_TUY_CHINH_TEN or "Chúc mừng!"
 else:
     NOI_DUNG_DRONE = ""
+
+# --- LỄ HỘI THÌ TỰ CHUYỂN THỜI TIẾT SANG ĐẸP — đang có hiệu ứng lễ hội (Admin cưỡng chế thiên
+# văn/pháo hoa/drone, HOẶC đúng ngày lễ lập trình sẵn, HOẶC đúng ngày lễ tuỳ chỉnh có bật hiệu
+# ứng) thì ghi đè thời tiết hiển thị thành "nắng đẹp", khỏi để trời thật đang mưa/u ám làm mất
+# không khí vui — các biến phụ thuộc thời tiết phía dưới (mây/nắng/mưa/nhật thực...) đều dùng lại
+# TRANG_THAI_THOI_TIET này nên sẽ tự đẹp theo, không cần sửa gì thêm ở chỗ khác.
+DANG_CO_LE_HOI = (
+    bool(CUONG_CHE_THIEN_VAN) or CUONG_CHE_PHAO_HOA or CUONG_CHE_DRONE
+    or IS_GIANG_SINH or IS_20_11 or IS_TRUNG_THU or IS_TET_TAY or IS_TET_TA
+    or NGAY_LE_TUY_CHINH_THIEN_VAN or NGAY_LE_TUY_CHINH_TUYET
+    or NGAY_LE_TUY_CHINH_PHAO_HOA or NGAY_LE_TUY_CHINH_DRONE
+)
+if DANG_CO_LE_HOI:
+    TRANG_THAI_THOI_TIET = "nang"
+DANG_MUA = TRANG_THAI_THOI_TIET in ("mua", "mua_to")
 
 
 # ---------------------------------------------------------------
