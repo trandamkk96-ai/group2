@@ -34,6 +34,10 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("21/09/2026", "🔧 Sửa lỗi bục top 3 đôi khi bị \"mất\" dòng điểm số (hạng Nhì/Ba có chiều cao khung quá thấp so với nội dung nên bị cắt mất chữ) — giờ khung tự giãn đủ chứa hết nội dung, không còn bị cắt nữa, vẫn giữ hình bậc podium cao thấp như cũ."),
+    ("21/09/2026", "🗂️ Form Cộng/Trừ điểm có thêm mục \"Lý do mẫu\": Admin nhập sẵn vài lý do/lỗi hay dùng (mục \"Quản lý lý do mẫu\" ngay dưới form) — lần cộng/trừ điểm sau chỉ cần bấm chọn trong danh sách, khỏi cần gõ lại lý do từ đầu mỗi lần."),
+    ("21/09/2026", "☀️ Nhật thực trên điện thoại rõ hơn: đẩy vị trí xuống thấp thêm và phóng to nhẹ để tránh bị thanh menu mặc định của Streamlit ở góc trên che mất, dễ thấy rõ hơn hẳn so với trước."),
+    ("21/09/2026", "✏️ Admin có thể sửa lại tên của 1 thành viên bất kỳ ngay trong thanh bên (mục \"Sửa tên thành viên\") — điểm, trạng thái khoá và toàn bộ lịch sử cộng/trừ điểm cũ đều giữ nguyên, chỉ đổi tên hiển thị."),
     ("18/09/2026", "🎆 Pháo hoa đẹp và thật hơn hẳn: giờ có vệt sáng bay vọt lên trước rồi mới nổ (giống pháo hoa thật), mỗi quả nổ ra 2-3 màu xen kẽ thay vì 1 màu đơn điệu, có 3 kiểu nổ ngẫu nhiên (hoa mẫu đơn tròn đều / hoa liễu rủ tia rơi chậm có đuôi / hoa cúc đại đoá nhiều tia mảnh dài), và quả to thì có thêm nhịp sáng rất nhẹ loé khắp màn hình đúng lúc nổ cho cảm giác rung động như pháo hoa thật."),
     ("18/09/2026", "☀️ Đang có lễ hội (Admin bật cưỡng chế thiên văn/pháo hoa/drone, HOẶC đúng ngày lễ thật đang diễn ra) thì thời tiết hiển thị trên web tự động chuyển sang \"nắng đẹp\", dù trời Mỹ Tho ngoài đời đang mưa hay nhiều mây cũng không làm mất không khí vui — hết lễ hội thì tự quay về đúng thời tiết thật như cũ."),
     ("18/09/2026", "📊 File Excel/PDF xuất ra giờ có thêm 3 cột ở bảng điểm: Tổng điểm được cộng (+), Tổng điểm bị trừ (-), và Tổng cả hai — tính đúng theo khoảng lịch sử đang xuất (nếu có lọc theo ngày thì 3 cột này cũng tính riêng theo đúng khoảng đó), khỏi cần tự cộng trừ tay."),
@@ -148,6 +152,15 @@ def init_db():
                 phao_hoa BOOLEAN NOT NULL DEFAULT FALSE,
                 drone BOOLEAN NOT NULL DEFAULT FALSE,
                 drone_chu TEXT,
+                tao_luc TIMESTAMP NOT NULL DEFAULT now()
+            )
+        """))
+        # Lý do mẫu cho form Cộng/Trừ điểm — Admin nhập sẵn vài lỗi/lý do hay dùng 1 lần, lần
+        # sau chỉ cần bấm chọn trong danh sách thay vì gõ lại từ đầu mỗi lần.
+        s.execute(text("""
+            CREATE TABLE IF NOT EXISTS ly_do_mau (
+                id SERIAL PRIMARY KEY,
+                noi_dung TEXT NOT NULL,
                 tao_luc TIMESTAMP NOT NULL DEFAULT now()
             )
         """))
@@ -426,6 +439,26 @@ def add_member(name):
         s.commit()
 
 
+def doi_ten_thanh_vien(ten_cu, ten_moi):
+    """Đổi tên 1 thành viên, giữ nguyên điểm + trạng thái khoá điểm + toàn bộ lịch sử cộng/trừ
+    điểm cũ. history.ten có ràng buộc khoá ngoại tới members.name (không có ON UPDATE CASCADE)
+    nên KHÔNG thể sửa thẳng members.name khi còn dòng lịch sử đang trỏ tới tên cũ — phải làm
+    theo đúng thứ tự: (1) tạo tạm 1 dòng members mới mang tên mới (copy nguyên điểm/khoá từ tên
+    cũ) để history có chỗ "hợp lệ" trỏ tới, (2) chuyển hết lịch sử cũ sang tên mới, (3) mới xoá
+    dòng members tên cũ đi — gộp cả 3 bước trong 1 transaction để không bao giờ dở dang."""
+    with conn.session as s:
+        s.execute(
+            text(
+                "INSERT INTO members (name, diem, diem_bi_khoa) "
+                "SELECT :moi, diem, diem_bi_khoa FROM members WHERE name = :cu"
+            ),
+            {"moi": ten_moi, "cu": ten_cu},
+        )
+        s.execute(text("UPDATE history SET ten = :moi WHERE ten = :cu"), {"moi": ten_moi, "cu": ten_cu})
+        s.execute(text("DELETE FROM members WHERE name = :cu"), {"cu": ten_cu})
+        s.commit()
+
+
 def update_score(name, so_diem, ly_do, nguoi_ky):
     with conn.session as s:
         s.execute(
@@ -565,6 +598,29 @@ def xoa_ngay_le_tuy_chinh(id_ngay_le):
         s.execute(text("DELETE FROM ngay_le_tuy_chinh WHERE id = :id"), {"id": id_ngay_le})
         s.commit()
     load_ngay_le_tuy_chinh.clear()
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def load_ly_do_mau():
+    """Danh sách lý do mẫu Admin đã nhập sẵn cho form Cộng/Trừ điểm — ít khi đổi nên cache 30
+    giây, Admin thêm/xoá thì tự xoá cache ngay (xem them_ly_do_mau() / xoa_ly_do_mau())."""
+    return conn.query("SELECT id, noi_dung FROM ly_do_mau ORDER BY noi_dung", ttl=0)
+
+
+def them_ly_do_mau(noi_dung):
+    """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi)."""
+    with conn.session as s:
+        s.execute(text("INSERT INTO ly_do_mau (noi_dung) VALUES (:nd)"), {"nd": noi_dung})
+        s.commit()
+    load_ly_do_mau.clear()
+
+
+def xoa_ly_do_mau(id_ly_do):
+    """Chỉ Admin mới gọi hàm này (đã kiểm tra is_admin trước khi gọi)."""
+    with conn.session as s:
+        s.execute(text("DELETE FROM ly_do_mau WHERE id = :id"), {"id": id_ly_do})
+        s.commit()
+    load_ly_do_mau.clear()
 
 
 def add_news(noi_dung):
@@ -1267,7 +1323,12 @@ st.markdown(f"""
     /* --- Podium top 3 --- */
     .podium-wrap {{ display: flex; align-items: flex-end; justify-content: center; gap: 14px; margin: 8px 0 26px; }}
     .podium-block {{
-        position: relative; overflow: hidden;
+        /* KHÔNG dùng overflow:hidden + height cố định ở đây nữa (trước đây làm vậy) — hạng 2/3
+           có chiều cao quá thấp so với nội dung thật (huy chương + avatar + tên + điểm + huy
+           hiệu) nên phần điểm số hay bị CẮT MẤT, nhìn như "mất điểm". Đổi sang min-height: khối
+           vẫn cao thấp theo đúng kiểu bục podium như cũ, nhưng nếu nội dung dài hơn thì khối tự
+           giãn thêm ra, không bao giờ cắt mất chữ nữa. */
+        position: relative;
         flex: 1; max-width: 220px; border-radius: 16px 16px 6px 6px; padding: 14px 10px 18px;
         text-align: center; color: white; box-shadow: 0 6px 16px rgba(0,0,0,0.12);
         animation: fadeInUp 0.5s ease both;
@@ -1275,11 +1336,11 @@ st.markdown(f"""
     }}
     .podium-block:hover {{ transform: translateY(-6px) scale(1.03); box-shadow: 0 12px 26px rgba(0,0,0,0.18); }}
     .podium-block.gold {{
-        background: linear-gradient(180deg,#fde68a,#f59e0b); height: 200px; order: 2;
+        background: linear-gradient(180deg,#fde68a,#f59e0b); min-height: 200px; order: 2; overflow: hidden;
         animation: fadeInUp 0.5s ease both, goldGlow 2.4s ease-in-out infinite;
     }}
-    .podium-block.silver {{ background: linear-gradient(180deg,#e5e7eb,#94a3b8); height: 160px; order: 1; }}
-    .podium-block.bronze {{ background: linear-gradient(180deg,#fed7aa,#fb923c); height: 140px; order: 3; }}
+    .podium-block.silver {{ background: linear-gradient(180deg,#e5e7eb,#94a3b8); min-height: 175px; order: 1; }}
+    .podium-block.bronze {{ background: linear-gradient(180deg,#fed7aa,#fb923c); min-height: 155px; order: 3; }}
     /* Ánh sáng lướt qua bục hạng Nhất cho lấp lánh nhẹ, không gây rối mắt */
     .podium-block.gold::after {{
         content: ""; position: absolute; top: 0; left: -60%; width: 40%; height: 100%;
@@ -1657,7 +1718,10 @@ else:
             100% {{ opacity: {DO_SANG_MAT_TROI}; }}
         }}
         @media (max-width: 640px) {{
-            .sun-wrap {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
+            /* top dùng max(3vh, 64px) để LUÔN cách mép trên màn hình ít nhất 64px trên điện
+               thoại — trước đây chỉ "3vh" (vài chục px trên nhiều máy) nên dễ bị thanh menu (☰)
+               mặc định của Streamlit ở góc trên đè lên che gần hết, khó thấy rõ nhật thực. */
+            .sun-wrap {{ width: 56px; height: 56px; top: max(3vh, 64px); right: 6vw; }}
         }}
 
         /* --- Mây trôi: 1 khối bo tròn + 2 "cục bông" (::before/::after) ghép lại. Màu mây
@@ -1722,7 +1786,7 @@ else:
             39.03%, 100% {{ box-shadow: inset 0 0 0 2px rgba(255, 221, 156, 0); }}
         }}
         @media (max-width: 640px) {{
-            .nhat-thuc-vanh-sang {{ width: 52px; height: 52px; top: 3vh; right: 6vw; }}
+            .nhat-thuc-vanh-sang {{ width: 56px; height: 56px; top: max(3vh, 64px); right: 6vw; }}
         }}
         @media (prefers-reduced-motion: reduce) {{
             .nhat-thuc-vanh-sang {{ animation: none !important; box-shadow: none; }}
@@ -2119,6 +2183,28 @@ if is_admin:
             st.sidebar.error("Tên này đã tồn tại!")
 
     st.sidebar.markdown("---")
+    st.sidebar.subheader("✏️ Sửa tên thành viên")
+    existing_for_rename = load_members()["name"].tolist()
+    if existing_for_rename:
+        ten_can_sua = st.sidebar.selectbox("Chọn thành viên cần sửa tên:", existing_for_rename, key="ten_sua_select")
+        ten_sau_khi_sua = st.sidebar.text_input("Nhập tên mới:", key="ten_sua_moi")
+        st.sidebar.caption("Điểm, trạng thái khoá và toàn bộ lịch sử cộng/trừ điểm cũ vẫn giữ nguyên, chỉ đổi tên hiển thị.")
+        if st.sidebar.button("✏️ Đổi tên", use_container_width=True):
+            ten_sau_khi_sua = ten_sau_khi_sua.strip()
+            if not ten_sau_khi_sua:
+                st.sidebar.error("Vui lòng nhập tên mới!")
+            elif ten_sau_khi_sua == ten_can_sua:
+                st.sidebar.error("Tên mới trùng với tên cũ rồi.")
+            elif ten_sau_khi_sua in existing_for_rename:
+                st.sidebar.error("Tên này đã có người dùng rồi!")
+            else:
+                doi_ten_thanh_vien(ten_can_sua, ten_sau_khi_sua)
+                st.sidebar.success(f"Đã đổi {ten_can_sua} thành {ten_sau_khi_sua}!")
+                st.rerun()
+    else:
+        st.sidebar.caption("Chưa có thành viên nào để sửa tên.")
+
+    st.sidebar.markdown("---")
     st.sidebar.subheader("🗑️ Xoá thành viên")
     existing_for_delete = load_members()["name"].tolist()
     if existing_for_delete:
@@ -2416,6 +2502,13 @@ with tab_home:
 
     # --- Form Cộng / Trừ điểm (chỉ Admin) + Hoàn tác ---
     if is_admin:
+        def _ap_dung_ly_do_mau():
+            """Callback của ô chọn lý do mẫu — chạy TRƯỚC khi ô nhập lý do được vẽ lại nên điền
+            sẵn được vào ô nhập, Admin vẫn sửa lại thoải mái nếu muốn (không bị khoá cứng)."""
+            _chon = st.session_state.get("chon_ly_do_mau_form", "")
+            if _chon and _chon != "✏️ Tự gõ lý do khác":
+                st.session_state["ly_do_nhap"] = _chon
+
         with st.expander("📝 Form Cộng / Trừ Điểm", expanded=True):
             if members_df.empty:
                 st.warning("Chưa có thành viên nào. Hãy thêm ở thanh bên trái!")
@@ -2426,7 +2519,15 @@ with tab_home:
                 with col2:
                     so_diem = st.number_input("Điểm (+/-):", value=0, step=1)
                 with col3:
-                    ly_do = st.text_input("Lý do / Lỗi vi phạm:")
+                    _ds_ly_do_mau_form = load_ly_do_mau()["noi_dung"].tolist()
+                    if _ds_ly_do_mau_form:
+                        st.selectbox(
+                            "Chọn lý do có sẵn:",
+                            ["✏️ Tự gõ lý do khác"] + _ds_ly_do_mau_form,
+                            key="chon_ly_do_mau_form",
+                            on_change=_ap_dung_ly_do_mau,
+                        )
+                    ly_do = st.text_input("Lý do / Lỗi vi phạm:", key="ly_do_nhap")
                 with col4:
                     nguoi_ky = st.text_input("Người ký tên:", value="Admin")
 
@@ -2451,6 +2552,36 @@ with tab_home:
                     undo_entry(int(e["id"]), e["ten"], int(e["so_diem"]))
                     st.success("Đã hoàn tác!")
                     st.rerun()
+        st.write("")
+
+        # --- Quản lý lý do mẫu (đặt riêng, không lồng expander vào expander được) ---
+        with st.expander("🗂️ Quản lý lý do mẫu"):
+            st.caption(
+                "Nhập sẵn vài lý do/lỗi hay dùng ở đây 1 lần — lần cộng/trừ điểm sau chỉ cần bấm "
+                "chọn trong ô \"Chọn lý do có sẵn\" ở Form Cộng/Trừ Điểm phía trên, khỏi cần gõ lại."
+            )
+            col_ldm1, col_ldm2 = st.columns([4, 1])
+            with col_ldm1:
+                ly_do_mau_moi = st.text_input("Thêm lý do mẫu mới:", key="ly_do_mau_moi_nhap", label_visibility="collapsed", placeholder="VD: Không làm bài tập")
+            with col_ldm2:
+                if st.button("➕ Thêm", use_container_width=True):
+                    ly_do_mau_moi = ly_do_mau_moi.strip()
+                    if ly_do_mau_moi:
+                        them_ly_do_mau(ly_do_mau_moi)
+                        st.success(f"Đã thêm: {ly_do_mau_moi}")
+                        st.rerun()
+                    else:
+                        st.error("Vui lòng nhập nội dung!")
+            _ds_ly_do_mau_quanly = load_ly_do_mau()
+            if not _ds_ly_do_mau_quanly.empty:
+                for _, _hang_ldm in _ds_ly_do_mau_quanly.iterrows():
+                    _c1, _c2 = st.columns([5, 1])
+                    _c1.write(f"• {_hang_ldm['noi_dung']}")
+                    if _c2.button("🗑️", key=f"xoa_ly_do_mau_{_hang_ldm['id']}", use_container_width=True):
+                        xoa_ly_do_mau(int(_hang_ldm["id"]))
+                        st.rerun()
+            else:
+                st.caption("Chưa có lý do mẫu nào.")
         st.write("")
 
     # --- Tìm kiếm + Sắp xếp + Bảng xếp hạng ---
