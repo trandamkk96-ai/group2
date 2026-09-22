@@ -34,6 +34,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("22/09/2026", "🔧 Sửa lỗi mục \"Lý do mẫu\" ở Form Cộng/Trừ điểm: trước đây bấm chọn lý do có sẵn xong ô nhập vẫn trống, bấm Cập nhật lại báo \"chưa nhập lý do\" — giờ chỉ cần chọn 1 lý do có sẵn (hoặc gõ tay) là dùng được ngay, không cần cả 2 ô phải khớp nhau nữa."),
     ("21/09/2026", "🔧 Sửa lỗi bục top 3 đôi khi bị \"mất\" dòng điểm số (hạng Nhì/Ba có chiều cao khung quá thấp so với nội dung nên bị cắt mất chữ) — giờ khung tự giãn đủ chứa hết nội dung, không còn bị cắt nữa, vẫn giữ hình bậc podium cao thấp như cũ."),
     ("21/09/2026", "🗂️ Form Cộng/Trừ điểm có thêm mục \"Lý do mẫu\": Admin nhập sẵn vài lý do/lỗi hay dùng (mục \"Quản lý lý do mẫu\" ngay dưới form) — lần cộng/trừ điểm sau chỉ cần bấm chọn trong danh sách, khỏi cần gõ lại lý do từ đầu mỗi lần."),
     ("21/09/2026", "☀️ Nhật thực trên điện thoại rõ hơn: đẩy vị trí xuống thấp thêm và phóng to nhẹ để tránh bị thanh menu mặc định của Streamlit ở góc trên che mất, dễ thấy rõ hơn hẳn so với trước."),
@@ -2502,13 +2503,6 @@ with tab_home:
 
     # --- Form Cộng / Trừ điểm (chỉ Admin) + Hoàn tác ---
     if is_admin:
-        def _ap_dung_ly_do_mau():
-            """Callback của ô chọn lý do mẫu — chạy TRƯỚC khi ô nhập lý do được vẽ lại nên điền
-            sẵn được vào ô nhập, Admin vẫn sửa lại thoải mái nếu muốn (không bị khoá cứng)."""
-            _chon = st.session_state.get("chon_ly_do_mau_form", "")
-            if _chon and _chon != "✏️ Tự gõ lý do khác":
-                st.session_state["ly_do_nhap"] = _chon
-
         with st.expander("📝 Form Cộng / Trừ Điểm", expanded=True):
             if members_df.empty:
                 st.warning("Chưa có thành viên nào. Hãy thêm ở thanh bên trái!")
@@ -2519,21 +2513,32 @@ with tab_home:
                 with col2:
                     so_diem = st.number_input("Điểm (+/-):", value=0, step=1)
                 with col3:
+                    # Lấy lý do THEO ƯU TIÊN: gõ tay (nếu có) > lý do mẫu đã chọn — tính thẳng lúc
+                    # bấm nút, KHÔNG cố đồng bộ 2 ô qua session_state (kiểu đó từng bị lỗi chọn lý
+                    # do mẫu xong ô nhập vẫn trống, bấm Cập nhật vẫn báo "chưa nhập lý do") nên giờ
+                    # chỉ cần chọn 1 trong 2 ô là đủ, không cần cả 2 phải khớp nhau.
                     _ds_ly_do_mau_form = load_ly_do_mau()["noi_dung"].tolist()
+                    _ly_do_mau_chon = ""
                     if _ds_ly_do_mau_form:
-                        st.selectbox(
+                        _lua_chon_ldm = st.selectbox(
                             "Chọn lý do có sẵn:",
                             ["✏️ Tự gõ lý do khác"] + _ds_ly_do_mau_form,
                             key="chon_ly_do_mau_form",
-                            on_change=_ap_dung_ly_do_mau,
                         )
-                    ly_do = st.text_input("Lý do / Lỗi vi phạm:", key="ly_do_nhap")
+                        if _lua_chon_ldm != "✏️ Tự gõ lý do khác":
+                            _ly_do_mau_chon = _lua_chon_ldm
+                    _nhan_o_ly_do = (
+                        f'Đã chọn "{_ly_do_mau_chon}" — gõ vào đây nếu muốn đổi lý do khác:'
+                        if _ly_do_mau_chon else "Lý do / Lỗi vi phạm:"
+                    )
+                    ly_do_go_tay = st.text_input(_nhan_o_ly_do, key="ly_do_nhap")
+                    ly_do = ly_do_go_tay.strip() or _ly_do_mau_chon
                 with col4:
                     nguoi_ky = st.text_input("Người ký tên:", value="Admin")
 
                 if st.button("✅ Cập nhật điểm", use_container_width=True):
                     if not ly_do.strip():
-                        st.error("Vui lòng nhập lý do!")
+                        st.error("Vui lòng nhập lý do (hoặc chọn 1 lý do có sẵn)!")
                     else:
                         update_score(ten_duoc_chon, int(so_diem), ly_do.strip(), nguoi_ky.strip())
                         st.success(f"Đã cập nhật {so_diem:+} điểm cho {ten_duoc_chon}!")
