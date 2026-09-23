@@ -34,6 +34,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("23/09/2026", "🔧 Sửa lỗi thỉnh thoảng hiện 1 dòng chữ tiếng Anh khi mở trang (hay gặp ở máy cũ/mạng yếu, do web phải chờ lấy dữ liệu lâu hơn): tắt hẳn dòng chữ trạng thái mặc định đó khi đọc dữ liệu, giờ chỉ còn thấy web đang tải chứ không hiện chữ tiếng Anh lạ nữa."),
     ("22/09/2026", "🔧 Sửa lỗi mục \"Lý do mẫu\" ở Form Cộng/Trừ điểm: trước đây bấm chọn lý do có sẵn xong ô nhập vẫn trống, bấm Cập nhật lại báo \"chưa nhập lý do\" — giờ chỉ cần chọn 1 lý do có sẵn (hoặc gõ tay) là dùng được ngay, không cần cả 2 ô phải khớp nhau nữa."),
     ("21/09/2026", "🔧 Sửa lỗi bục top 3 đôi khi bị \"mất\" dòng điểm số (hạng Nhì/Ba có chiều cao khung quá thấp so với nội dung nên bị cắt mất chữ) — giờ khung tự giãn đủ chứa hết nội dung, không còn bị cắt nữa, vẫn giữ hình bậc podium cao thấp như cũ."),
     ("21/09/2026", "🗂️ Form Cộng/Trừ điểm có thêm mục \"Lý do mẫu\": Admin nhập sẵn vài lý do/lỗi hay dùng (mục \"Quản lý lý do mẫu\" ngay dưới form) — lần cộng/trừ điểm sau chỉ cần bấm chọn trong danh sách, khỏi cần gõ lại lý do từ đầu mỗi lần."),
@@ -186,7 +187,7 @@ Thứ 7: Công nghệ • SHL"""
 def _gieo_tkb_neu_trong():
     """Nếu bảng thời khóa biểu chưa có dòng nào (mới thêm tính năng lần đầu), tự điền sẵn
     thời khóa biểu hiện tại vào — để tab không bị trống trơn ngay từ đầu."""
-    so_dong = conn.query("SELECT COUNT(*) AS n FROM thoikhoabieu", ttl=0).iloc[0]["n"]
+    so_dong = conn.query("SELECT COUNT(*) AS n FROM thoikhoabieu", ttl=0, show_spinner=False).iloc[0]["n"]
     if so_dong == 0:
         with conn.session as s:
             s.execute(text("INSERT INTO thoikhoabieu (noi_dung) VALUES (:nd)"), {"nd": TKB_MAC_DINH})
@@ -198,7 +199,7 @@ _gieo_tkb_neu_trong()
 
 # --- Truy vấn dữ liệu -----------------------------------------------------
 def load_members():
-    return conn.query("SELECT name, diem, diem_bi_khoa FROM members ORDER BY diem DESC, name", ttl=0)
+    return conn.query("SELECT name, diem, diem_bi_khoa FROM members ORDER BY diem DESC, name", ttl=0, show_spinner=False)
 
 
 def dat_khoa_diem(name, khoa):
@@ -223,7 +224,7 @@ def load_history(name, start=None, end=None):
         query += ' AND ngay < :end'
         params["end"] = end + timedelta(days=1)
     query += ' ORDER BY ngay DESC'
-    return conn.query(query, params=params, ttl=0)
+    return conn.query(query, params=params, ttl=0, show_spinner=False)
 
 
 def load_all_history(start=None, end=None):
@@ -239,7 +240,7 @@ def load_all_history(start=None, end=None):
         query += ' AND ngay < :end'
         params["end"] = end + timedelta(days=1)
     query += ' ORDER BY ngay DESC'
-    return conn.query(query, params=params, ttl=0)
+    return conn.query(query, params=params, ttl=0, show_spinner=False)
 
 
 def load_recent_all(limit_per_member=10):
@@ -257,7 +258,7 @@ def load_recent_all(limit_per_member=10):
         ORDER BY ten, rn
         """,
         params={"lim": limit_per_member},
-        ttl=0,
+        ttl=0, show_spinner=False,
     )
 
 
@@ -267,10 +268,10 @@ def load_trend_series(name=None):
         df = conn.query(
             'SELECT ngay AS "Ngày", so_diem FROM history WHERE ten = :ten ORDER BY ngay ASC',
             params={"ten": name},
-            ttl=0,
+            ttl=0, show_spinner=False,
         )
     else:
-        df = conn.query('SELECT ngay AS "Ngày", so_diem FROM history ORDER BY ngay ASC', ttl=0)
+        df = conn.query('SELECT ngay AS "Ngày", so_diem FROM history ORDER BY ngay ASC', ttl=0, show_spinner=False)
     if df.empty:
         return df
     df["Điểm cộng dồn"] = df["so_diem"].cumsum()
@@ -306,7 +307,7 @@ def load_last_entry():
     """Lấy lần cộng/trừ điểm gần nhất (để có thể hoàn tác)."""
     return conn.query(
         'SELECT id, ten, so_diem, ly_do, ngay FROM history ORDER BY ngay DESC, id DESC LIMIT 1',
-        ttl=0,
+        ttl=0, show_spinner=False,
     )
 
 
@@ -317,7 +318,7 @@ def load_recent_activity(limit=15):
         '       ly_do AS "Lý do", xac_nhan AS "Xác nhận" '
         'FROM history ORDER BY ngay DESC, id DESC LIMIT :lim',
         params={"lim": limit},
-        ttl=0,
+        ttl=0, show_spinner=False,
     )
 
 
@@ -510,7 +511,7 @@ def load_feedback():
     """Chỉ Admin gọi hàm này để đọc góp ý (kèm cả trả lời nếu có) — tên người gửi không
     hiển thị công khai ở đâu khác."""
     return conn.query(
-        'SELECT id, nguoi_gui, noi_dung, ngay, phan_hoi, ngay_phan_hoi FROM feedback ORDER BY ngay DESC', ttl=0,
+        'SELECT id, nguoi_gui, noi_dung, ngay, phan_hoi, ngay_phan_hoi FROM feedback ORDER BY ngay DESC', ttl=0, show_spinner=False,
     )
 
 
@@ -537,7 +538,7 @@ def load_feedback_da_tra_loi():
     return conn.query(
         "SELECT id, noi_dung, phan_hoi, ngay_phan_hoi FROM feedback "
         "WHERE phan_hoi IS NOT NULL AND phan_hoi != '' ORDER BY ngay_phan_hoi DESC",
-        ttl=0,
+        ttl=0, show_spinner=False,
     )
 
 
@@ -546,7 +547,7 @@ def load_cai_dat_he_thong():
     """Đọc toàn bộ cài đặt "cưỡng chế" của Admin (hiệu ứng thiên văn/pháo hoa/trình diễn ánh
     sáng ép bật cho MỌI người xem) thành 1 dict {khoa: gia_tri}. Cache 5 giây — nhiều người
     xem cùng lúc không dồn hết vào database, mà Admin bấm đổi vẫn thấy hiệu lực gần như ngay."""
-    df = conn.query("SELECT khoa, gia_tri FROM cai_dat_he_thong", ttl=0)
+    df = conn.query("SELECT khoa, gia_tri FROM cai_dat_he_thong", ttl=0, show_spinner=False)
     return dict(zip(df["khoa"], df["gia_tri"])) if not df.empty else {}
 
 
@@ -572,7 +573,7 @@ def load_ngay_le_tuy_chinh():
     return conn.query(
         "SELECT id, ngay, ten, thien_van, tuyet, phao_hoa, drone, drone_chu "
         "FROM ngay_le_tuy_chinh ORDER BY ngay",
-        ttl=0,
+        ttl=0, show_spinner=False,
     )
 
 
@@ -605,7 +606,7 @@ def xoa_ngay_le_tuy_chinh(id_ngay_le):
 def load_ly_do_mau():
     """Danh sách lý do mẫu Admin đã nhập sẵn cho form Cộng/Trừ điểm — ít khi đổi nên cache 30
     giây, Admin thêm/xoá thì tự xoá cache ngay (xem them_ly_do_mau() / xoa_ly_do_mau())."""
-    return conn.query("SELECT id, noi_dung FROM ly_do_mau ORDER BY noi_dung", ttl=0)
+    return conn.query("SELECT id, noi_dung FROM ly_do_mau ORDER BY noi_dung", ttl=0, show_spinner=False)
 
 
 def them_ly_do_mau(noi_dung):
@@ -633,12 +634,12 @@ def add_news(noi_dung):
 
 def load_news():
     """Tin tức công khai — ai cũng xem được, chỉ Admin mới đăng/xoá được."""
-    return conn.query('SELECT id, noi_dung, ngay FROM news ORDER BY ngay DESC', ttl=0)
+    return conn.query('SELECT id, noi_dung, ngay FROM news ORDER BY ngay DESC', ttl=0, show_spinner=False)
 
 
 def load_latest_news():
     """Lấy đúng 1 tin mới nhất — để hiện lên Trang chủ (nếu chưa có tin nào thì trả về rỗng)."""
-    return conn.query('SELECT id, noi_dung, ngay FROM news ORDER BY ngay DESC LIMIT 1', ttl=0)
+    return conn.query('SELECT id, noi_dung, ngay FROM news ORDER BY ngay DESC LIMIT 1', ttl=0, show_spinner=False)
 
 
 def delete_news(news_id):
@@ -657,7 +658,7 @@ def add_thoikhoabieu(noi_dung):
 
 def load_thoikhoabieu_hien_tai():
     """Lấy bản thời khóa biểu mới nhất (bản Admin lưu gần đây nhất)."""
-    return conn.query('SELECT id, noi_dung, ngay FROM thoikhoabieu ORDER BY ngay DESC LIMIT 1', ttl=0)
+    return conn.query('SELECT id, noi_dung, ngay FROM thoikhoabieu ORDER BY ngay DESC LIMIT 1', ttl=0, show_spinner=False)
 
 
 _MAU_DONG_THU = re.compile(r"^\s*Thứ\s*(\d+|Bảy|bảy|CN|cn)\s*[:：]\s*(.+?)\s*$")
@@ -698,7 +699,7 @@ def load_lich_thi_sap_toi():
     hom_nay = datetime.now(GIO_HA_NOI).date()
     return conn.query(
         "SELECT id, tieu_de, ngay_thi, ghi_chu FROM lich_thi WHERE ngay_thi >= :hn ORDER BY ngay_thi ASC",
-        params={"hn": hom_nay}, ttl=0,
+        params={"hn": hom_nay}, ttl=0, show_spinner=False,
     )
 
 
@@ -707,7 +708,7 @@ def load_lich_thi_da_qua():
     hom_nay = datetime.now(GIO_HA_NOI).date()
     return conn.query(
         "SELECT id, tieu_de, ngay_thi, ghi_chu FROM lich_thi WHERE ngay_thi < :hn ORDER BY ngay_thi DESC",
-        params={"hn": hom_nay}, ttl=0,
+        params={"hn": hom_nay}, ttl=0, show_spinner=False,
     )
 
 
