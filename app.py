@@ -34,6 +34,7 @@ APP_URL = "https://group2-bl2ar8lcntmbxvkpfxy4n7.streamlit.app/"
 # Nhật ký cập nhật web — mỗi khi thêm tính năng mới, chỉ cần thêm 1 dòng (ngày, mô tả)
 # vào ĐẦU danh sách này rồi cập nhật app.py; tab "🆕 Cập nhật" sẽ tự hiện ra.
 UPDATES = [
+    ("23/09/2026", "🌌 Thêm 4 hiện tượng thiên văn mới cho Chế độ tối: 🌈 Cực quang (dải ánh sáng xanh-tím lắc lư mềm mại), 🌠✨ Mưa sao băng (dồn dập từng đợt, khác sao băng rải rác), 🌑🔴 Trăng máu/nguyệt thực (trăng ngả đỏ cam rồi sáng lại theo chu kỳ), 🪐 Tinh vân (đám mây khí nhiều màu tĩnh lặng) — giờ đủ 7 ngày trong tuần là 7 hiện tượng khác nhau, không còn lặp lại. Admin cưỡng chế và ngày lễ tuỳ chỉnh cũng chọn được cả 4 cái mới này."),
     ("23/09/2026", "🔧 Sửa lỗi thỉnh thoảng hiện 1 dòng chữ tiếng Anh khi mở trang (hay gặp ở máy cũ/mạng yếu, do web phải chờ lấy dữ liệu lâu hơn): tắt hẳn dòng chữ trạng thái mặc định đó khi đọc dữ liệu, giờ chỉ còn thấy web đang tải chứ không hiện chữ tiếng Anh lạ nữa."),
     ("22/09/2026", "🔧 Sửa lỗi mục \"Lý do mẫu\" ở Form Cộng/Trừ điểm: trước đây bấm chọn lý do có sẵn xong ô nhập vẫn trống, bấm Cập nhật lại báo \"chưa nhập lý do\" — giờ chỉ cần chọn 1 lý do có sẵn (hoặc gõ tay) là dùng được ngay, không cần cả 2 ô phải khớp nhau nữa."),
     ("21/09/2026", "🔧 Sửa lỗi bục top 3 đôi khi bị \"mất\" dòng điểm số (hạng Nhì/Ba có chiều cao khung quá thấp so với nội dung nên bị cắt mất chữ) — giờ khung tự giãn đủ chứa hết nội dung, không còn bị cắt nữa, vẫn giữ hình bậc podium cao thấp như cũ."),
@@ -889,7 +890,9 @@ IS_NGAY_LE_TUY_CHINH = not _NGAY_LE_TUY_CHINH_HOM_NAY.empty
 # object thành float("nan") chứ không phải None — và nan lại "truthy" trong Python (bool(nan) ==
 # True) nên "if tv" hay "if dc" là SAI, dễ bị dính giá trị rỗng; phải kiểm tra isinstance(..., str)
 # cho chắc mới lọc đúng được các dòng thật sự có nhập giá trị.
-_THIEN_VAN_HOP_LE = ("sao_bang", "sao_choi", "ngan_ha")
+_THIEN_VAN_HOP_LE = (
+    "sao_bang", "sao_choi", "ngan_ha", "cuc_quang", "mua_sao_bang", "trang_mau", "tinh_van",
+)
 NGAY_LE_TUY_CHINH_THIEN_VAN = (
     next((tv for tv in _NGAY_LE_TUY_CHINH_HOM_NAY["thien_van"] if isinstance(tv, str) and tv in _THIEN_VAN_HOP_LE), "")
     if IS_NGAY_LE_TUY_CHINH else ""
@@ -1026,28 +1029,29 @@ def pha_mat_trang(ngay):
 
 
 _TEN_HIEN_TUONG_THEO_THU = {
-    0: "ngan_ha",   # Thứ 2 — dải Ngân Hà sáng rực cả vùng trời
-    1: "sao_bang",  # Thứ 3
-    2: "sao_choi",  # Thứ 4
-    3: "sao_bang",  # Thứ 5
-    4: "ngan_ha",   # Thứ 6 — dải Ngân Hà sáng rực cả vùng trời
-    5: "ngan_ha",   # Thứ 7 — dải Ngân Hà sáng rực cả vùng trời
-    6: "ngan_ha",   # CN — dải Ngân Hà sáng rực cả vùng trời
+    0: "ngan_ha",       # Thứ 2 — dải Ngân Hà sáng rực cả vùng trời
+    1: "sao_bang",      # Thứ 3 — sao băng
+    2: "sao_choi",      # Thứ 4 — sao chổi
+    3: "mua_sao_bang",  # Thứ 5 — mưa sao băng (từng đợt dồn dập, khác sao băng rải rác)
+    4: "cuc_quang",     # Thứ 6 — cực quang
+    5: "tinh_van",      # Thứ 7 — tinh vân
+    6: "trang_mau",     # CN — trăng máu (nguyệt thực)
 }
 
 
 def hien_tuong_thien_van_hom_nay():
-    """Mỗi ngày trong tuần có 1 hiện tượng thiên văn riêng cho Chế độ tối — đổi đều đặn
-    theo thứ trong tuần (giờ Hà Nội), ai mở web cùng ngày cũng thấy giống nhau:
-    Thứ 2 = dải Ngân Hà, các ngày còn lại xen kẽ sao băng / sao chổi.
+    """Mỗi ngày trong tuần có 1 hiện tượng thiên văn RIÊNG cho Chế độ tối, đủ 7 ngày 7 kiểu
+    khác nhau không lặp — đổi đều đặn theo thứ trong tuần (giờ Hà Nội), ai mở web cùng ngày
+    cũng thấy giống nhau: Thứ 2 Ngân Hà, Thứ 3 sao băng, Thứ 4 sao chổi, Thứ 5 mưa sao băng,
+    Thứ 6 cực quang, Thứ 7 tinh vân, CN trăng máu.
     Admin cưỡng chế (CUONG_CHE_THIEN_VAN) thì LUÔN thắng; kế đến là đêm Giáng Sinh (luôn dải
     Ngân Hà); kế đến là ngày lễ tuỳ chỉnh của Admin (nếu có chọn hiện tượng thiên văn riêng);
     còn không thì mới tính theo thứ trong tuần như bình thường."""
-    if CUONG_CHE_THIEN_VAN in ("sao_bang", "sao_choi", "ngan_ha"):
+    if CUONG_CHE_THIEN_VAN in _THIEN_VAN_HOP_LE:
         return CUONG_CHE_THIEN_VAN
     if IS_GIANG_SINH:
         return "ngan_ha"
-    if NGAY_LE_TUY_CHINH_THIEN_VAN in ("sao_bang", "sao_choi", "ngan_ha"):
+    if NGAY_LE_TUY_CHINH_THIEN_VAN in _THIEN_VAN_HOP_LE:
         return NGAY_LE_TUY_CHINH_THIEN_VAN
     return _TEN_HIEN_TUONG_THEO_THU[datetime.now(GIO_HA_NOI).weekday()]
 
@@ -1083,6 +1087,33 @@ def _make_starfield_html(hien_tuong):
             )
             for i in range(SO_SAO_CHOI)
         )
+    elif hien_tuong == "mua_sao_bang":
+        # Mưa sao băng: KHÁC sao băng rải rác đều (sao_bang) ở chỗ dồn dập thành TỪNG ĐỢT —
+        # rất nhiều vệt bay dồn vào ~12 giây đầu mỗi chu kỳ 30 giây rồi im ắng hẳn, lặp lại,
+        # đúng cảm giác "một trận mưa sao băng" thay vì lác đác đều đặn. Mỗi vệt còn bay theo
+        # 1 góc hơi khác nhau (±15°) thay vì cùng 1 góc y hệt, nhìn tự nhiên hơn — dùng CSS
+        # custom property (--goc/--dx/--dy) để 1 khung hình @keyframes dùng chung cho tất cả
+        # vệt vẫn tự lấy đúng góc/hướng bay riêng của từng vệt (không cần JavaScript).
+        SO_MUA_SAO_BANG = 55
+        _parts_msb = []
+        for i in range(SO_MUA_SAO_BANG):
+            goc = round(random.uniform(-45, -25), 1)
+            rad = math.radians(goc)
+            quang_duong = round(random.uniform(310, 430), 0)
+            # LƯU Ý: hướng bay (dx, dy) phải NGƯỢC dấu cos/sin của góc xoay CSS mới khớp đúng
+            # chiều với rotate(--goc) — kiểm chứng lại từ chính vệt sao băng/sao chổi có sẵn
+            # (rotate(-35deg) khớp translate(-340px, 240px), rotate(-28deg) khớp
+            # translate(-460px, 260px)) đều đúng công thức dx=-d·cos(góc), dy=-d·sin(góc).
+            dx = round(-quang_duong * math.cos(rad), 1)
+            dy = round(-quang_duong * math.sin(rad), 1)
+            top = round(random.uniform(2, 50), 1)
+            left = round(random.uniform(10, 98), 1)
+            delay = round(random.uniform(0, 11), 2)
+            _parts_msb.append(
+                f'<div class="mua-sao-bang" style="top:{top}vh; left:{left}vw; '
+                f'animation-delay:{delay}s; --goc:{goc}deg; --dx:{dx}px; --dy:{dy}px;"></div>'
+            )
+        hien_tuong_html = "".join(_parts_msb)
     else:
         # Mặc định (kể cả ngày dải Ngân Hà): vẫn có sao băng như cũ, dải Ngân Hà sẽ vẽ
         # chồng thêm lên bên trên chứ không thay thế sao băng.
@@ -1112,6 +1143,35 @@ def _dai_ngan_ha_hat(n=150):
     return ", ".join(diem)
 
 
+def _tao_tinh_van():
+    """Tinh vân: 2-3 đám mây khí ngoài không gian, mỗi đám là 1 quầng radial-gradient nhiều
+    màu (hồng/tím/xanh lam — màu thật của ảnh chụp tinh vân qua kính viễn vọng), làm mờ bằng
+    filter: blur() và trộn màu bằng mix-blend-mode: screen để phát sáng rực trên nền trời đen,
+    chỉ "thở" nhẹ (phồng/xẹp + sáng/tối chậm rãi) chứ KHÔNG bay/trôi như các hiện tượng khác —
+    tĩnh lặng, huyền ảo hơn. Sinh vị trí/kích cỡ/màu ngẫu nhiên mỗi lần tải trang cho đỡ nhàm,
+    tối đa 3 đám để nhẹ máy (mỗi đám 1 lớp blur riêng, hơi tốn hơn 1 chấm sao thường)."""
+    BANG_MAU_TINH_VAN = [
+        ("rgba(217,70,239,0.34)", "rgba(139,92,246,0.26)", "rgba(56,189,248,0.16)"),   # hồng-tím-xanh
+        ("rgba(56,189,248,0.32)", "rgba(45,212,191,0.24)", "rgba(129,140,248,0.16)"),  # xanh dương-ngọc-chàm
+        ("rgba(244,114,182,0.30)", "rgba(251,146,60,0.22)", "rgba(217,70,239,0.14)"),  # hồng-cam-tím
+    ]
+    SO_TINH_VAN = 3
+    parts = []
+    for i in range(SO_TINH_VAN):
+        mau1, mau2, mau3 = random.choice(BANG_MAU_TINH_VAN)
+        top = round(random.uniform(2, 48), 1)
+        left = round(random.uniform(-8, 78), 1)
+        rong = round(random.uniform(38, 58), 1)
+        cao = round(rong * random.uniform(0.55, 0.8), 1)
+        delay = round(i * 3.3 + random.uniform(0, 2), 2)
+        parts.append(
+            f'<div class="tinh-van" style="top:{top}vh; left:{left}vw; width:{rong}vw; '
+            f'height:{cao}vw; animation-delay:{delay}s; '
+            f'background: radial-gradient(circle at 42% 40%, {mau1} 0%, {mau2} 40%, {mau3} 68%, transparent 85%);"></div>'
+        )
+    return "".join(parts)
+
+
 if dark_mode:
     HIEN_TUONG_DEM = hien_tuong_thien_van_hom_nay()
     ST_SMALL, ST_MEDIUM, ST_LARGE, HIEN_TUONG_HTML = _make_starfield_html(HIEN_TUONG_DEM)
@@ -1125,6 +1185,14 @@ if dark_mode:
         )
     else:
         NGAN_HA_HTML = ''
+
+    # --- 4 hiện tượng thiên văn mới: cực quang / tinh vân / trăng máu — mỗi thứ trong tuần chỉ
+    # có ĐÚNG 1 hiện tượng nên các biến dưới đây không bao giờ cùng khác rỗng 1 lúc (trừ khi
+    # Admin cưỡng chế đổi thứ đang xem), nhẹ máy như hiệu ứng cũ. "Mưa sao băng" không cần biến
+    # HTML riêng vì đã dùng chung HIEN_TUONG_HTML ở trên (chỉ khác class/hiệu ứng CSS).
+    CUC_QUANG_HTML = '<div class="aurora"></div>' if HIEN_TUONG_DEM == "cuc_quang" else ''
+    TINH_VAN_HTML = _tao_tinh_van() if HIEN_TUONG_DEM == "tinh_van" else ''
+    TRANG_MAU_HTML = '<div class="moon-mau"></div>' if HIEN_TUONG_DEM == "trang_mau" else ''
 
 # ---------------------------------------------------------------
 # CSS — giao diện
@@ -1533,10 +1601,13 @@ if dark_mode:
         /* Ai bật "giảm chuyển động" trong máy (Reduce Motion / Giảm chuyển động) thì tắt hẳn
            các hoạt ảnh trang trí này — vừa nhẹ máy vừa đúng ý người dùng. */
         @media (prefers-reduced-motion: reduce) {{
-            .stars-small, .stars-medium, .stars-large, .shooting-star, .comet, .moon {{ animation: none !important; }}
-            .shooting-star, .comet {{ opacity: 0 !important; }}
+            .stars-small, .stars-medium, .stars-large, .shooting-star, .comet, .mua-sao-bang, .moon {{ animation: none !important; }}
+            .shooting-star, .comet, .mua-sao-bang {{ opacity: 0 !important; }}
             .ngan-ha::before, .ngan-ha-hat {{ animation: none !important; }}
             .ngan-ha {{ opacity: 0.6 !important; }}
+            .aurora, .aurora::before {{ animation: none !important; opacity: 0.4 !important; }}
+            .tinh-van {{ animation: none !important; }}
+            .moon-mau {{ animation: none !important; opacity: 0.75 !important; }}
         }}
 
         /* --- Sao chổi: hiện tượng riêng của Thứ 4/6/CN — đầu sáng rực + đuôi dài ánh xanh,
@@ -1561,6 +1632,28 @@ if dark_mode:
         }}
         @media (max-width: 640px) {{
             .comet {{ width: 150px; }}
+        }}
+
+        /* --- Mưa sao băng: hiện tượng riêng của Thứ 5 — nhìn giống vệt sao băng thường nhưng
+           MỖI vệt bay theo góc/quãng đường RIÊNG (đặt qua biến CSS --goc/--dx/--dy ở từng phần
+           tử, xem _make_starfield_html()) nên 1 khung hình @keyframes dùng chung cho tất cả mà
+           vẫn ra nhiều hướng bay hơi lệch nhau — cộng với việc JS-Python dồn hầu hết độ trễ vào
+           ~12 giây đầu mỗi chu kỳ nên nhìn như từng ĐỢT dồn dập rồi ngưng, đúng chất "mưa sao
+           băng" chứ không rải đều như sao băng thường. --- */
+        .mua-sao-bang {{
+            position: fixed; width: 130px; height: 2px; border-radius: 999px;
+            background: linear-gradient(90deg, rgba(255,255,255,0.95), rgba(224,231,255,0));
+            opacity: 0; transform: rotate(var(--goc, -35deg));
+            animation: mua-sao-bang-bay 30s linear infinite; will-change: opacity, transform;
+        }}
+        @keyframes mua-sao-bang-bay {{
+            0%, 88% {{ opacity: 0; transform: translate(0, 0) rotate(var(--goc, -35deg)); }}
+            89% {{ opacity: 1; }}
+            96% {{ opacity: 1; transform: translate(var(--dx, -340px), var(--dy, 240px)) rotate(var(--goc, -35deg)); }}
+            100% {{ opacity: 0; transform: translate(var(--dx, -340px), var(--dy, 240px)) rotate(var(--goc, -35deg)); }}
+        }}
+        @media (max-width: 640px) {{
+            .mua-sao-bang:nth-child(n+30) {{ display: none; }}
         }}
 
         /* --- Dải Ngân Hà (bản làm lại cho DỊU MẮT hơn): bản trước dùng linear-gradient nên bị
@@ -1612,6 +1705,23 @@ if dark_mode:
             background: {C_BG}; transform: translateX({DO_LECH_TRANG}%);
             transition: transform 1s ease; z-index: 2;
         }}
+        /* --- Trăng máu (nguyệt thực): hiện tượng riêng của Chủ Nhật — 1 lớp phủ màu đỏ cam
+           (mix-blend-mode: multiply để vừa NHUỘM MÀU vừa LÀM TỐI mặt trăng, đúng như bóng Trái
+           Đất che thật) đặt DƯỚI .moon-shadow (z-index thấp hơn) nên phần khuyết vẫn hiện đúng
+           màu nền trời như cũ, chỉ phần trăng còn sáng mới ngả đỏ — rồi mờ dần vào/ra theo chu
+           kỳ lặp, mô phỏng đúng diễn biến 1 lần nguyệt thực thật (sáng → đỏ cam → sáng lại). --- */
+        .moon-mau {{
+            position: absolute; inset: 0; border-radius: 50%; z-index: 1; opacity: 0;
+            background: radial-gradient(circle at 40% 35%, rgba(255,120,60,0.85) 0%, rgba(190,40,30,0.85) 55%, rgba(110,20,20,0.8) 100%);
+            mix-blend-mode: multiply;
+            animation: nguyet-thuc 300s ease-in-out infinite;
+        }}
+        @keyframes nguyet-thuc {{
+            0%, 3% {{ opacity: 0; }}
+            30% {{ opacity: 0.92; }}
+            55% {{ opacity: 0.92; }}
+            82%, 100% {{ opacity: 0; }}
+        }}
         .moon::before, .moon::after {{
             content: ""; position: absolute; border-radius: 50%; background: rgba(120, 110, 70, 0.18);
         }}
@@ -1629,13 +1739,71 @@ if dark_mode:
             .moon::before {{ width: 12px; height: 12px; top: 9px; left: 11px; }}
             .moon::after {{ width: 7px; height: 7px; top: 29px; left: 30px; box-shadow: -16px 4px 0 -2px rgba(120, 110, 70, 0.16); }}
         }}
+
+        /* --- Cực quang: hiện tượng riêng của Thứ 6 — 2 dải màu mờ rộng (linear-gradient nhiều
+           màu + filter: blur() để loang mềm như khí quyển thật) xếp chồng, mỗi dải nghiêng/lắc
+           lư (skewY + translateX) theo 1 nhịp riêng NGƯỢC hướng nhau, tạo cảm giác "rèm ánh
+           sáng" đang uốn lượn — mix-blend-mode: screen để màu PHÁT SÁNG cộng dồn lên nền trời
+           đen như ánh cực quang thật chứ không phải 1 mảng màu tô phẳng. --- */
+        .aurora {{
+            position: fixed; top: 0; left: -20%; width: 140%; height: 52vh; pointer-events: none;
+            background: linear-gradient(100deg, transparent 0%, rgba(16,185,129,0.34) 16%,
+                rgba(45,212,191,0.38) 32%, rgba(129,140,248,0.34) 50%, rgba(192,132,252,0.28) 68%, transparent 86%);
+            filter: blur(26px); mix-blend-mode: screen; opacity: 0.7; transform-origin: top center;
+            animation: aurora-lac 15s ease-in-out infinite alternate, aurora-sang 6s ease-in-out infinite;
+            will-change: transform, opacity;
+        }}
+        .aurora::before {{
+            content: ""; position: absolute; inset: 0;
+            background: linear-gradient(120deg, transparent 12%, rgba(52,211,153,0.26) 30%,
+                rgba(56,189,248,0.28) 52%, rgba(167,139,250,0.22) 72%, transparent 90%);
+            filter: blur(20px); transform-origin: top center;
+            animation: aurora-lac2 19s ease-in-out infinite alternate;
+        }}
+        @keyframes aurora-lac {{
+            0% {{ transform: skewY(-2deg) translateX(-3%); }}
+            100% {{ transform: skewY(3deg) translateX(3%); }}
+        }}
+        @keyframes aurora-lac2 {{
+            0% {{ transform: skewY(2.5deg) translateX(4%) scaleY(1); }}
+            100% {{ transform: skewY(-3deg) translateX(-4%) scaleY(1.08); }}
+        }}
+        @keyframes aurora-sang {{
+            0%, 100% {{ opacity: 0.55; }}
+            50% {{ opacity: 0.85; }}
+        }}
+        @media (max-width: 640px) {{
+            .aurora {{ height: 38vh; filter: blur(16px); }}
+            .aurora::before {{ filter: blur(13px); }}
+        }}
+
+        /* --- Tinh vân: hiện tượng riêng của Thứ 7 — đám mây khí nhiều màu (radial-gradient +
+           blur, mix-blend-mode: screen như cực quang) nhưng CHỈ "thở" (phồng/sáng nhẹ) chứ
+           không lắc lư/trôi, tạo cảm giác tĩnh lặng huyền ảo khác hẳn cực quang. Sinh 2-3 đám
+           ở _tao_tinh_van() phía trên, mỗi đám tự set màu/kích cỡ/vị trí riêng qua style inline,
+           .tinh-van ở đây chỉ định khung chung (bo tròn/mờ/hoà trộn màu/nhịp thở). --- */
+        .tinh-van {{
+            position: fixed; border-radius: 50%; pointer-events: none;
+            filter: blur(28px); mix-blend-mode: screen; opacity: 0.55;
+            animation: tinh-van-tho 9s ease-in-out infinite;
+            will-change: opacity, transform;
+        }}
+        @keyframes tinh-van-tho {{
+            0%, 100% {{ opacity: 0.5; transform: scale(1); }}
+            50% {{ opacity: 0.82; transform: scale(1.07); }}
+        }}
+        @media (max-width: 640px) {{
+            .tinh-van {{ filter: blur(16px); }}
+            .tinh-van:nth-of-type(n+3) {{ display: none; }}
+        }}
     </style>
     <div class="starfield" style="opacity: {DO_MO_BAU_TROI};">{NGAN_HA_HTML}
-        <div class="moon"><div class="moon-shadow"></div></div>
+        <div class="moon">{TRANG_MAU_HTML}<div class="moon-shadow"></div></div>
         <div class="stars-small"></div>
         <div class="stars-medium"></div>
         <div class="stars-large"></div>
         {HIEN_TUONG_HTML}
+        {CUC_QUANG_HTML}{TINH_VAN_HTML}
     </div>
     """, unsafe_allow_html=True)
 else:
@@ -3126,12 +3294,21 @@ if is_admin:
 
         st.write("")
         st.markdown("##### 🌌 Hiện tượng thiên văn")
-        st.caption("Chỉ thấy được khi web đang ở 🌙 Chế độ tối. Mặc định (Tự động) thì đổi theo thứ trong tuần, riêng đêm Giáng Sinh luôn là dải Ngân Hà.")
+        st.caption(
+            "Chỉ thấy được khi web đang ở 🌙 Chế độ tối. Mặc định (Tự động) thì đổi theo thứ "
+            "trong tuần — đủ 7 ngày 7 kiểu khác nhau (Thứ 2 Ngân Hà, Thứ 3 sao băng, Thứ 4 sao "
+            "chổi, Thứ 5 mưa sao băng, Thứ 6 cực quang, Thứ 7 tinh vân, CN trăng máu); riêng đêm "
+            "Giáng Sinh luôn là dải Ngân Hà."
+        )
         _TUY_CHON_THIEN_VAN = {
             "": "🔄 Tự động (theo ngày)",
             "sao_bang": "🌠 Ép: Sao băng",
             "sao_choi": "☄️ Ép: Sao chổi",
             "ngan_ha": "🌌 Ép: Dải Ngân Hà",
+            "mua_sao_bang": "🌠✨ Ép: Mưa sao băng",
+            "cuc_quang": "🌈 Ép: Cực quang",
+            "tinh_van": "🪐 Ép: Tinh vân",
+            "trang_mau": "🌑🔴 Ép: Trăng máu",
         }
         _ds_khoa_thien_van = list(_TUY_CHON_THIEN_VAN.keys())
         _lua_chon_thien_van = st.selectbox(
